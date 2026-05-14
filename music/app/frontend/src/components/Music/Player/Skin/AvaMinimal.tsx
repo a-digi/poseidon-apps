@@ -65,7 +65,7 @@ export type PlayerAvaMinimalProps = {
   handleProgressCommit: () => void;
   handlePlayPause: () => void;
   isPlaying: boolean;
-  modeDropdownRef: React.RefObject<HTMLDivElement>;
+  modeDropdownRef: React.RefObject<HTMLDivElement | null>;
   setShowModeDropdown: React.Dispatch<React.SetStateAction<boolean>>;
   playMode: 'playlist' | 'repeat' | 'shuffle';
   showModeDropdown: boolean;

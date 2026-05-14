@@ -9,19 +9,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "react-router-dom": "^6.22.0",
     "react-i18next": "^13.5.0",
     "i18next": "^23.7.0",
-    "lucide-react": "^0.252.0",
+    "lucide-react": "^1.16.0",
     "clsx": "^1.2.1",
     "tailwind-merge": "^1.13.2",
     "music-metadata-browser": "^2.5.10"
   },
   "devDependencies": {
-    "@types/react": "^18.0.37",
-    "@types/react-dom": "^18.0.11",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.0.0",
     "autoprefixer": "^10.4.12",
     "postcss": "^8.4.17",
