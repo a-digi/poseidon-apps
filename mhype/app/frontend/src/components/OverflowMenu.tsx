@@ -12,7 +12,7 @@ interface OverflowMenuProps {
   ariaLabel?: string;
 }
 
-export function OverflowMenu({ items, ariaLabel = 'Menu' }: OverflowMenuProps): JSX.Element {
+export function OverflowMenu({ items, ariaLabel = 'Menu' }: OverflowMenuProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 

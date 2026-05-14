@@ -5,7 +5,7 @@ interface SwitchProps {
   disabled?: boolean;
 }
 
-export function Switch({ checked, onChange, ariaLabel, disabled }: SwitchProps): JSX.Element {
+export function Switch({ checked, onChange, ariaLabel, disabled }: SwitchProps) {
   const pillColor = checked ? 'bg-blue-600' : 'bg-slate-200';
   const disabledClass = disabled ? 'opacity-50 cursor-not-allowed' : '';
   const knobTranslate = checked ? 'translate-x-4' : 'translate-x-0.5';
