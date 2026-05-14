@@ -1,4 +1,6 @@
-import { Briefcase, CalendarClock, FileText, Repeat, Smartphone, Tag, Users } from 'lucide-react';
+import { useState } from 'react';
+import { Briefcase, CalendarClock, FileText, Menu, Repeat, Smartphone, Tag, Users, X } from 'lucide-react';
+import { useIsMobile } from '../../lib/useIsMobile';
 
 export type TabKey = 'business' | 'users' | 'tags' | 'invoice' | 'recurring' | 'upcoming';
 
@@ -24,6 +26,66 @@ const TABS: TabDef[] = [
 ];
 
 export function TopBar({ active, onChange, onSharePhone }: TopBarProps) {
+  const isMobile = useIsMobile();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const activeTab = TABS.find(t => t.key === active);
+
+  if (isMobile) {
+    return (
+      <>
+        <header className="sticky top-0 z-30 bg-gray-50 border-b border-slate-200 px-4 flex items-center h-14">
+          <span className="text-base font-bold text-slate-900">Budgeting</span>
+          {activeTab && (
+            <span className="ml-3 text-sm text-slate-500 font-medium">{activeTab.label}</span>
+          )}
+          <button
+            type="button"
+            onClick={() => setMenuOpen(o => !o)}
+            aria-label="Open menu"
+            aria-expanded={menuOpen}
+            className="ml-auto p-2 rounded-md text-slate-600 hover:bg-slate-200 transition-colors"
+          >
+            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </header>
+
+        {menuOpen && (
+          <div
+            className="fixed inset-0 z-20 bg-black/40"
+            onClick={() => setMenuOpen(false)}
+          >
+            <nav
+              className="absolute right-0 top-14 w-56 bg-white border-l border-b border-slate-200 rounded-bl-xl shadow-xl overflow-hidden"
+              aria-label="Main navigation"
+              onClick={e => e.stopPropagation()}
+            >
+              {TABS.map(({ key, label, Icon }) => {
+                const isActive = key === active;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => { onChange(key); setMenuOpen(false); }}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    {label}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-10 bg-gray-50 border-b border-slate-200 px-6 flex items-center gap-6 h-14">
       <span className="text-base font-bold text-slate-900 shrink-0">Budgeting</span>

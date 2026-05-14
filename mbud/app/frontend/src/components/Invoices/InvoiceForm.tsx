@@ -7,6 +7,7 @@ import type { Business, Invoice, Tag, User } from '../../api';
 import { dateInputFromEpoch, epochFromDateInput } from '../../lib/format';
 import { AttachmentDialog } from './AttachmentDialog';
 import { InvoiceAttachments } from './InvoiceAttachments';
+import { useIsMobile } from '../../lib/useIsMobile';
 
 interface InvoiceFormProps {
   initial: Invoice | null;
@@ -61,6 +62,7 @@ export function InvoiceForm({ initial, businesses, users, tags, onSave, onClose 
   const [busy, setBusy] = useState(false);
   const [showAttachmentDialog, setShowAttachmentDialog] = useState(false);
   const [attachmentRefreshKey, setAttachmentRefreshKey] = useState(0);
+  const isMobile = useIsMobile();
 
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) => {
     setForm(prev => ({ ...prev, [k]: v }));
@@ -202,13 +204,15 @@ export function InvoiceForm({ initial, businesses, users, tags, onSave, onClose 
           {initial !== null && (
             <InvoiceAttachments invoiceId={initial.id} refreshKey={attachmentRefreshKey} />
           )}
-          <button
-            type="button"
-            onClick={() => setShowAttachmentDialog(true)}
-            className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
-          >
-            Upload from phone
-          </button>
+          {!isMobile && (
+            <button
+              type="button"
+              onClick={() => setShowAttachmentDialog(true)}
+              className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
+            >
+              Upload from phone
+            </button>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <CancelButton onClick={onClose} disabled={busy} />
             <SaveButton loading={busy} />
