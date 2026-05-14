@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>SNAKE</title>
+    <style>
+        :root {
+            --accent: #00ffff;
+            --bg: #0a0a0f;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg);
+            touch-action: none;
+        }
+
+        #canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        /* ── HUD ────────────────────────────────────────────────────── */
+        #hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 18px;
+            height: 38px;
+            padding: 0 16px;
+            background: rgba(10, 10, 15, 0.88);
+            border-bottom: 1px solid rgba(0, 255, 255, 0.12);
+            font-family: 'Courier New', monospace;
+            font-size: 0.78rem;
+            letter-spacing: 0.12em;
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+
+        #hud.chrome-hidden {
+            opacity: 0;
+            transform: translateY(-100%);
+            pointer-events: none;
+        }
+
+        #hud label {
+            color: #555;
+        }
+
+        #hud .val {
+            color: var(--accent);
+            text-shadow: 0 0 6px var(--accent);
+        }
+
+        #boostHud {
+            display: none;
+            align-items: center;
+            gap: 5px;
+        }
+
+        #boostBar {
+            width: 64px;
+            height: 5px;
+            background: #1a1a2e;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        #boostBarFill {
+            height: 100%;
+            background: #ffee00;
+            box-shadow: 0 0 5px #ffee00;
+            border-radius: 3px;
+        }
+
+        .hud-btn {
+            font-family: 'Courier New', monospace;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            background: none;
+            border: 1px solid #333;
+            border-radius: 3px;
+            padding: 2px 7px;
+            color: #888;
+            cursor: pointer;
+        }
+
+        .hud-btn:hover {
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .hud-btn.active {
+            color: var(--accent);
+            border-color: var(--accent);
+            text-shadow: 0 0 5px var(--accent);
+        }
+
+        /* ── Overlay ────────────────────────────────────────────────── */
+        #overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            pointer-events: none;
+            background: rgba(10, 10, 15, 0.65);
+            font-family: 'Courier New', monospace;
+        }
+
+        #overlayTitle {
+            font-size: clamp(2rem, 7vw, 4rem);
+            letter-spacing: 0.5em;
+            color: var(--accent);
+            text-shadow: 0 0 12px var(--accent), 0 0 40px var(--accent);
+        }
+
+        #msg {
+            font-size: clamp(1rem, 4vw, 1.6rem);
+            letter-spacing: 0.3em;
+            color: #f0f;
+            text-shadow: 0 0 10px #f0f;
+        }
+
+        #sub {
+            font-size: 0.72rem;
+            color: #666;
+            letter-spacing: 0.13em;
+            text-align: center;
+            padding: 0 16px;
+        }
+
+        /* ── Joystick ───────────────────────────────────────────────── */
+        #joystick {
+            position: fixed;
+            z-index: 15;
+            display: none;
+            /* shown when mobileMode */
+            align-items: center;
+            justify-content: center;
+        }
+
+        #joy-base {
+            position: relative;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: rgba(0, 255, 255, 0.04);
+            border: 2px solid rgba(0, 255, 255, 0.25);
+            box-shadow: 0 0 18px rgba(0, 255, 255, 0.08);
+        }
+
+        #joy-thumb {
+            position: absolute;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 40% 35%, rgba(0, 255, 255, 0.6), rgba(0, 255, 255, 0.15));
+            border: 2px solid rgba(0, 255, 255, 0.8);
+            box-shadow: 0 0 14px rgba(0, 255, 255, 0.5), inset 0 0 8px rgba(0, 255, 255, 0.2);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        /* faint cardinal hints */
+        .joy-hint {
+            position: absolute;
+            color: rgba(0, 255, 255, 0.25);
+            font-size: 0.7rem;
+            line-height: 1;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .joy-n {
+            top: 6px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .joy-s {
+            bottom: 6px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .joy-w {
+            left: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .joy-e {
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* ── Controls bar ───────────────────────────────────────────── */
+        #controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            height: 46px;
+            padding: 0 12px;
+            background: rgba(10, 10, 15, 0.88);
+            border-top: 1px solid rgba(0, 255, 255, 0.08);
+            flex-wrap: wrap;
+            font-family: 'Courier New', monospace;
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+
+        #controls.chrome-hidden {
+            opacity: 0;
+            transform: translateY(100%);
+            pointer-events: none;
+        }
+
+        .ctrl {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            font-size: 0.54rem;
+            color: #777;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .ctrl input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 88px;
+            height: 3px;
+            background: #1a1a2e;
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .ctrl input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            background: var(--accent);
+            border-radius: 50%;
+            box-shadow: 0 0 4px var(--accent);
+            cursor: pointer;
+        }
+
+        .ctrl input[type=color] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 32px;
+            height: 18px;
+            border: 1px solid #333;
+            background: none;
+            cursor: pointer;
+            padding: 0;
+            border-radius: 2px;
+        }
+
+        .ctrl input[type=color]::-webkit-color-swatch-wrapper {
+            padding: 2px;
+        }
+
+        .ctrl input[type=color]::-webkit-color-swatch {
+            border: none;
+            border-radius: 1px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="hud">
+        <div><label>SCORE </label><span class="val" id="scoreEl">0</span></div>
+        <div><label>HIGH </label><span class="val" id="highEl">0</span></div>
+        <div><label>LEVEL </label><span class="val" id="levelEl">1</span></div>
+        <div><label>LEN </label><span class="val" id="lenEl">0</span></div>
+        <div id="boostHud">
+            <label>BOOST </label>
+            <div id="boostBar">
+                <div id="boostBarFill" style="width:100%"></div>
+            </div>
+        </div>
+        <button class="hud-btn" id="muteBtn">♪ AN</button>
+        <button class="hud-btn" id="mobileBtn">📱 AUS</button>
+    </div>
+
+    <div id="overlay">
+        <div id="overlayTitle">SNAKE</div>
+        <div id="msg">PRESS SPACE</div>
+        <div id="sub" style="text-align:center">WASD / Pfeiltasten &nbsp;·&nbsp; P = Pause &nbsp;·&nbsp; M = Musik</div>
+    </div>
+
+    <!-- Virtual joystick -->
+    <div id="joystick">
+        <div id="joy-base">
+            <div id="joy-thumb"></div>
+            <span class="joy-hint joy-n">▲</span>
+            <span class="joy-hint joy-s">▼</span>
+            <span class="joy-hint joy-w">◄</span>
+            <span class="joy-hint joy-e">►</span>
+        </div>
+    </div>
+
+    <div id="controls">
+        <div class="ctrl">
+            <label>Speed</label>
+            <input type="range" id="speedCtrl" min="1" max="20" value="8">
+            <span id="speedVal">8</span>
+        </div>
+        <div class="ctrl"><label>Schlange</label><input type="color" id="snakeColor" value="#00ffff"></div>
+        <div class="ctrl"><label>Frucht</label><input type="color" id="fruitColor" value="#ff00ff"></div>
+        <div class="ctrl"><label>Schrift</label><input type="color" id="fontColor" value="#00ffff"></div>
+        <div class="ctrl"><label>Hintergrund</label><input type="color" id="bgColor" value="#0a0a0f"></div>
+    </div>
+
+    <script>
+        // ── canvas (always full screen) ───────────────────────────────────────────
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const CELL = 20;
+        const COLS = Math.floor(window.innerWidth / CELL);
+        const ROWS = Math.floor(window.innerHeight / CELL);
+        canvas.width = COLS * CELL;
+        canvas.height = ROWS * CELL;
+        canvas.style.left = ((window.innerWidth - canvas.width) / 2) + 'px';
+        canvas.style.top = ((window.innerHeight - canvas.height) / 2) + 'px';
+
+        // ── audio ─────────────────────────────────────────────────────────────────
+        let audioCtx = null, masterGain = null, muted = false;
+
+        function getAC() {
+            if (!audioCtx) {
+                audioCtx = new AudioContext();
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = 0.7;
+                masterGain.connect(audioCtx.destination);
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
+        }
+
+        function tone(freq, type, vol, dur, at) {
+            const a = getAC(), t = at ?? a.currentTime;
+            const o = a.createOscillator(), g = a.createGain();
+            o.connect(g); g.connect(masterGain);
+            o.type = type; o.frequency.value = freq;
+            g.gain.setValueAtTime(vol, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+            o.start(t); o.stop(t + dur + 0.01);
+        }
+        function sweep(f0, f1, type, vol, dur, at) {
+            const a = getAC(), t = at ?? a.currentTime;
+            const o = a.createOscillator(), g = a.createGain();
+            o.connect(g); g.connect(masterGain);
+            o.type = type;
+            o.frequency.setValueAtTime(f0, t);
+            o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.9);
+            g.gain.setValueAtTime(vol, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+            o.start(t); o.stop(t + dur + 0.01);
+        }
+
+        const playEat = () => { const t = getAC().currentTime; sweep(700, 150, 'square', 0.35, 0.07, t); sweep(500, 100, 'square', 0.22, 0.07, t + 0.055); };
+        const playDeath = () => { const t = getAC().currentTime;[330, 262, 220, 147].forEach((f, i) => tone(f, 'sawtooth', 0.28, 0.2, t + i * 0.2)); };
+        const playLevel = () => { const t = getAC().currentTime;[262, 330, 392, 523].forEach((f, i) => tone(f, 'square', 0.2, 0.12, t + i * 0.1)); };
+        const playBoost = () => { const t = getAC().currentTime;[440, 550, 660, 880].forEach((f, i) => tone(f, 'triangle', 0.25, 0.1, t + i * 0.07)); };
+        const playBreak = () => sweep(400, 60, 'sawtooth', 0.3, 0.12);
+
+        function toggleMute() {
+            muted = !muted;
+            if (masterGain) masterGain.gain.value = muted ? 0 : 0.7;
+            document.getElementById('muteBtn').textContent = muted ? '♪ AUS' : '♪ AN';
+        }
+
+        // ── music ─────────────────────────────────────────────────────────────────
+        const STP = 60 / 130 / 2;
+        const C3 = 130.81, Eb3 = 155.56, F3 = 174.61, G3 = 196, Bb3 = 233.08;
+        const C4 = 261.63, Eb4 = 311.13, F4 = 349.23, G4 = 392, Bb4 = 466.16, C5 = 523.25;
+        const BASS = [C3, 0, G3, 0, Bb3, 0, F3, 0, C3, 0, Eb3, 0, F3, 0, G3, 0];
+        const LEAD = [0, C4, 0, Eb4, G4, 0, Bb4, 0, 0, G4, 0, F4, Eb4, 0, F4, C5];
+        let musicId = null, musicStep = 0, nextBeat = 0;
+
+        function scheduleMusicNotes() {
+            if (!audioCtx) return;
+            const a = getAC();
+            while (nextBeat < a.currentTime + 0.3) {
+                const s = musicStep % 16;
+                if (BASS[s]) tone(BASS[s], 'triangle', 0.08, STP * 1.7, nextBeat);
+                if (LEAD[s]) tone(LEAD[s], 'square', 0.04, STP * 0.7, nextBeat);
+                nextBeat += STP; musicStep++;
+            }
+        }
+        function startMusic() { if (musicId) return; nextBeat = getAC().currentTime + 0.05; musicId = setInterval(scheduleMusicNotes, 40); }
+        function stopMusic() { clearInterval(musicId); musicId = null; }
+
+        // ── colors / settings ─────────────────────────────────────────────────────
+        let snakeHex = '#00ffff', fruitHex = '#ff00ff', accentHex = '#00ffff', bgHex = '#0a0a0f', baseSpeed = 8;
+
+        function setAccent(h) { accentHex = h; document.documentElement.style.setProperty('--accent', h); }
+        function setBg(h) { bgHex = h; document.documentElement.style.setProperty('--bg', h); }
+
+        document.getElementById('snakeColor').addEventListener('input', e => snakeHex = e.target.value);
+        document.getElementById('fruitColor').addEventListener('input', e => fruitHex = e.target.value);
+        document.getElementById('fontColor').addEventListener('input', e => setAccent(e.target.value));
+        document.getElementById('bgColor').addEventListener('input', e => setBg(e.target.value));
+        document.getElementById('muteBtn').addEventListener('click', toggleMute);
+        document.getElementById('speedCtrl').addEventListener('input', e => {
+            baseSpeed = +e.target.value;
+            document.getElementById('speedVal').textContent = baseSpeed;
+            if (running) restartLoop();
+        });
+
+        // ── mobile toggle ─────────────────────────────────────────────────────────
+        let mobileMode = (navigator.maxTouchPoints > 1 || window.innerWidth < 900);
+
+        function applyMobileMode() {
+            const btn = document.getElementById('mobileBtn');
+            const joystick = document.getElementById('joystick');
+            const sub = document.getElementById('sub');
+            if (mobileMode) {
+                joystick.style.display = 'flex';
+                btn.textContent = '📱 AN';
+                btn.classList.add('active');
+                sub.innerHTML = 'Joystick oder Wischen &nbsp;·&nbsp; M = Musik';
+                positionJoystick();
+            } else {
+                joystick.style.display = 'none';
+                btn.textContent = '📱 AUS';
+                btn.classList.remove('active');
+                sub.innerHTML = 'WASD / Pfeiltasten &nbsp;·&nbsp; P = Pause &nbsp;·&nbsp; M = Musik';
+            }
+        }
+
+        function positionJoystick() {
+            const el = document.getElementById('joystick');
+            const ctH = 46; // controls bar height
+            const jsH = 140;
+            el.style.bottom = (ctH + 16) + 'px';
+            el.style.left = '50%';
+            el.style.transform = 'translateX(-50%)';
+            el.style.width = jsH + 'px';
+            el.style.height = jsH + 'px';
+        }
+
+        document.getElementById('mobileBtn').addEventListener('click', () => {
+            mobileMode = !mobileMode;
+            applyMobileMode();
+        });
+
+        // ── game state ────────────────────────────────────────────────────────────
+        function effectiveSpeed() { return Math.min(20, baseSpeed + (level - 1)); }
+        function restartLoop() { clearInterval(loopId); loopId = setInterval(tick, 1000 / effectiveSpeed()); }
+
+        let snake, dir, nextDir, fruit, walls, movingWalls, boostItem;
+        let score, level, highScore = 0, running = false, paused = false;
+        let boostActive = false, boostEndTime = 0;
+        let wallMoveCounter = 0, levelFlashTime = -Infinity;
+        let loopId;
+
+        function rnd(n) { return Math.floor(Math.random() * n); }
+        function hexRgb(h) { return `${parseInt(h.slice(1, 3), 16)},${parseInt(h.slice(3, 5), 16)},${parseInt(h.slice(5, 7), 16)}`; }
+
+        function buildOcc({ includeFruit = true, includeBoost = true } = {}) {
+            const s = new Set();
+            snake.forEach(c => s.add(`${c.x},${c.y}`));
+            walls.forEach(c => s.add(`${c.x},${c.y}`));
+            movingWalls.forEach(g => g.cells.forEach(c => s.add(`${c.x},${c.y}`)));
+            if (includeFruit && fruit) s.add(`${fruit.x},${fruit.y}`);
+            if (includeBoost && boostItem) s.add(`${boostItem.x},${boostItem.y}`);
+            return s;
+        }
+        function freeCell(occ) {
+            for (let i = 0; i < 2000; i++) { const c = { x: rnd(COLS), y: rnd(ROWS) }; if (!occ.has(`${c.x},${c.y}`)) return c; }
+            for (let y = 0; y < ROWS; y++)for (let x = 0; x < COLS; x++)if (!occ.has(`${x},${y}`)) return { x, y };
+            return null;
+        }
+        function spawnFruit() { const c = freeCell(buildOcc({ includeFruit: false, includeBoost: true })); if (c) fruit = c; }
+        function spawnBoostItem() { const c = freeCell(buildOcc({ includeFruit: true, includeBoost: false })); if (c) boostItem = c; }
+        function spawnSegment(len, margin = 1, moving = false) {
+            const horiz = Math.random() < 0.5, occ = buildOcc();
+            for (let a = 0; a < 80; a++) {
+                const sx = margin + rnd(COLS - margin * 2 - (horiz ? len - 1 : 0));
+                const sy = margin + rnd(ROWS - margin * 2 - (horiz ? 0 : len - 1));
+                const cells = Array.from({ length: len }, (_, i) => ({ x: sx + (horiz ? i : 0), y: sy + (horiz ? 0 : i) }));
+                if (cells.every(c => !occ.has(`${c.x},${c.y}`))) {
+                    if (moving) return { cells, axis: horiz ? 'h' : 'v', dir: Math.random() < 0.5 ? 1 : -1 };
+                    return cells;
+                }
+            }
+            return moving ? null : [];
+        }
+
+        function init() {
+            const sx = Math.floor(COLS / 2), sy = Math.floor(ROWS / 2);
+            snake = Array.from({ length: 15 }, (_, i) => ({ x: sx - i, y: sy }));
+            dir = nextDir = { x: 1, y: 0 };
+            walls = []; movingWalls = []; boostItem = null; fruit = null;
+            score = 0; level = 1; boostActive = false; boostEndTime = 0;
+            wallMoveCounter = 0; levelFlashTime = -Infinity;
+            spawnFruit(); updateHud();
+        }
+
+        // ── tick ──────────────────────────────────────────────────────────────────
+        function tick() {
+            if (boostActive && Date.now() > boostEndTime) boostActive = false;
+
+            wallMoveCounter++;
+            const me = Math.max(2, 6 - Math.floor(level / 2));
+            if (wallMoveCounter >= me) { wallMoveCounter = 0; stepMovingWalls(); if (!running) return; }
+
+            dir = nextDir;
+            const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+            if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) { die(); return; }
+            if (snake.slice(0, -1).some(s => s.x === head.x && s.y === head.y)) { die(); return; }
+
+            const wi = walls.findIndex(w => w.x === head.x && w.y === head.y);
+            if (wi !== -1) { if (boostActive) { walls.splice(wi, 1); playBreak(); } else { die(); return; } }
+
+            for (const g of movingWalls) {
+                const ci = g.cells.findIndex(c => c.x === head.x && c.y === head.y);
+                if (ci !== -1) { if (boostActive) { g.cells.splice(ci, 1); playBreak(); } else { die(); return; } }
+            }
+            movingWalls = movingWalls.filter(g => g.cells.length > 0);
+
+            snake.unshift(head);
+
+            if (boostItem && head.x === boostItem.x && head.y === boostItem.y) {
+                boostItem = null; boostActive = true; boostEndTime = Date.now() + 5000; playBoost();
+            }
+
+            if (head.x === fruit.x && head.y === fruit.y) {
+                score++; if (score > highScore) highScore = score;
+                playEat(); spawnFruit();
+                const we = Math.max(1, 4 - Math.floor(level / 2));
+                if (score % we === 0) { const seg = spawnSegment(2 + rnd(2)); walls.push(...seg); }
+                if (score % 8 === 0 && !boostItem) spawnBoostItem();
+                checkLevelUp();
+            } else { snake.pop(); }
+
+            updateHud(); draw();
+        }
+
+        function stepMovingWalls() {
+            const ss = new Set(walls.map(w => `${w.x},${w.y}`));
+            for (const g of movingWalls) {
+                const dx = g.axis === 'h' ? g.dir : 0, dy = g.axis === 'v' ? g.dir : 0;
+                const next = g.cells.map(c => ({ x: c.x + dx, y: c.y + dy }));
+                const other = new Set(movingWalls.filter(x => x !== g).flatMap(x => x.cells).map(c => `${c.x},${c.y}`));
+                const blocked = next.some(c => c.x < 0 || c.x >= COLS || c.y < 0 || c.y >= ROWS || ss.has(`${c.x},${c.y}`) || other.has(`${c.x},${c.y}`));
+                if (blocked) { g.dir *= -1; continue; }
+                const snakeSet = new Set(snake.map(s => `${s.x},${s.y}`));
+                const hits = next.filter(c => snakeSet.has(`${c.x},${c.y}`));
+                if (hits.length) {
+                    if (boostActive) { g.cells = next.filter(c => !snakeSet.has(`${c.x},${c.y}`)); playBreak(); }
+                    else { die(); return; }
+                } else { g.cells = next; }
+            }
+            movingWalls = movingWalls.filter(g => g.cells.length > 0);
+        }
+
+        function checkLevelUp() {
+            const nl = Math.floor(score / 5) + 1; if (nl <= level) return;
+            level = nl; restartLoop();
+            if (movingWalls.length < 6) { const g = spawnSegment(2 + rnd(2), 2, true); if (g) movingWalls.push(g); }
+            levelFlashTime = Date.now(); playLevel();
+        }
+
+        function die() {
+            running = false; paused = false; clearInterval(loopId); stopMusic(); playDeath();
+            if (score > highScore) highScore = score;
+            updateHud();
+            showOverlay('GAME OVER', `Score: ${score} &nbsp;·&nbsp; SPACE zum Neustart &nbsp;·&nbsp; P = Pause`);
+        }
+        function start() { init(); running = true; paused = false; restartLoop(); startMusic(); hideOverlay(); draw(); }
+
+        function togglePause() {
+            if (!running) return;
+            paused = !paused;
+            if (paused) {
+                clearInterval(loopId);
+                stopMusic();
+                drawPauseOverlay();
+            } else {
+                restartLoop();
+                startMusic();
+                draw();
+            }
+        }
+
+        function drawPauseOverlay() {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = `bold ${CELL * 3}px "Courier New",monospace`;
+            ctx.fillStyle = accentHex; ctx.shadowColor = accentHex; ctx.shadowBlur = 24;
+            ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+            ctx.font = `${CELL}px "Courier New",monospace`;
+            ctx.fillStyle = '#555'; ctx.shadowBlur = 0;
+            ctx.fillText('P · Weiter', canvas.width / 2, canvas.height / 2 + CELL * 3.2);
+            ctx.restore();
+        }
+
+        function updateHud() {
+            document.getElementById('scoreEl').textContent = score ?? 0;
+            document.getElementById('highEl').textContent = highScore;
+            document.getElementById('levelEl').textContent = level ?? 1;
+            document.getElementById('lenEl').textContent = snake ? snake.length : 0;
+        }
+        function updateBoostBar() {
+            const h = document.getElementById('boostHud');
+            if (boostActive) {
+                h.style.display = 'flex';
+                document.getElementById('boostBarFill').style.width = Math.max(0, (boostEndTime - Date.now()) / 5000) * 100 + '%';
+            } else { h.style.display = 'none'; }
+        }
+        function showChrome() {
+            document.getElementById('hud').classList.remove('chrome-hidden');
+            document.getElementById('controls').classList.remove('chrome-hidden');
+        }
+        function hideChrome() {
+            document.getElementById('hud').classList.add('chrome-hidden');
+            document.getElementById('controls').classList.add('chrome-hidden');
+        }
+        function showOverlay(msg, sub) {
+            document.getElementById('msg').innerHTML = msg;
+            document.getElementById('sub').innerHTML = sub;
+            document.getElementById('overlay').style.display = 'flex';
+            showChrome();
+        }
+        function hideOverlay() { document.getElementById('overlay').style.display = 'none'; hideChrome(); }
+
+        // ── drawing ───────────────────────────────────────────────────────────────
+        function draw() {
+            ctx.fillStyle = bgHex; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            drawGrid(); drawBorder(); drawWalls(); drawMovingWalls(); drawBoostItem(); drawFruit(); drawSnake(); drawLevelFlash();
+        }
+        function drawBorder() {
+            const rgb = hexRgb(accentHex);
+            ctx.strokeStyle = `rgba(${rgb},0.7)`;
+            ctx.lineWidth = 3;
+            ctx.shadowColor = accentHex;
+            ctx.shadowBlur = 14;
+            ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+            ctx.shadowBlur = 0;
+        }
+        function drawGrid() {
+            ctx.strokeStyle = '#ffffff06'; ctx.lineWidth = 1;
+            for (let x = 0; x <= COLS; x++) { ctx.beginPath(); ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, canvas.height); ctx.stroke(); }
+            for (let y = 0; y <= ROWS; y++) { ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(canvas.width, y * CELL); ctx.stroke(); }
+        }
+        function block(x, y, color, glow, alpha = 1) {
+            const px = x * CELL, py = y * CELL, rgb = hexRgb(color);
+            if (glow > 0) { ctx.shadowColor = `rgba(${rgb},${alpha})`; ctx.shadowBlur = glow; }
+            ctx.fillStyle = `rgba(${rgb},${alpha * 0.2})`; ctx.fillRect(px + 1, py + 1, CELL - 2, CELL - 2);
+            ctx.fillStyle = `rgba(${rgb},${alpha})`; ctx.fillRect(px + 3, py + 3, CELL - 6, CELL - 6);
+            ctx.shadowBlur = 0;
+        }
+        function drawWalls() {
+            walls.forEach(w => {
+                block(w.x, w.y, '#ff6600', 8, 0.9);
+                const px = w.x * CELL, py = w.y * CELL;
+                ctx.strokeStyle = 'rgba(255,100,0,0.4)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(px + 3, py + 3); ctx.lineTo(px + CELL - 3, py + CELL - 3); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(px + CELL - 3, py + 3); ctx.lineTo(px + 3, py + CELL - 3); ctx.stroke();
+            });
+        }
+        function drawMovingWalls() {
+            movingWalls.forEach(g => {
+                g.cells.forEach(c => {
+                    block(c.x, c.y, '#ff0055', 12, 0.95);
+                    const cx = c.x * CELL + CELL / 2, cy = c.y * CELL + CELL / 2;
+                    const dx = g.axis === 'h' ? g.dir : 0, dy = g.axis === 'v' ? g.dir : 0;
+                    ctx.fillStyle = 'rgba(255,80,130,0.9)';
+                    ctx.beginPath(); ctx.moveTo(cx + dx * 5, cy + dy * 5); ctx.lineTo(cx - dx * 3 + dy * 3, cy - dy * 3 + dx * 3); ctx.lineTo(cx - dx * 3 - dy * 3, cy - dy * 3 - dx * 3); ctx.closePath(); ctx.fill();
+                });
+            });
+        }
+        function drawBoostItem() {
+            if (!boostItem) return;
+            const p = 0.65 + 0.35 * Math.sin(Date.now() / 350);
+            const px = boostItem.x * CELL, py = boostItem.y * CELL, cx = px + CELL / 2, cy = py + CELL / 2;
+            ctx.shadowColor = `rgba(255,238,0,${p})`; ctx.shadowBlur = 18 * p; ctx.fillStyle = `rgba(255,238,0,${p})`;
+            ctx.fillRect(cx + 1, cy - 7, 4, 7); ctx.fillRect(cx - 3, cy - 1, 8, 3); ctx.fillRect(cx - 5, cy + 2, 4, 7);
+            ctx.shadowBlur = 0;
+        }
+        function drawSnake() {
+            snake.forEach((seg, i) => {
+                const alpha = 0.4 + 0.6 * (1 - i / snake.length), isHead = i === 0;
+                const color = boostActive ? '#ffffff' : snakeHex;
+                block(seg.x, seg.y, color, isHead ? (boostActive ? 22 : 12) : 0, alpha);
+                if (isHead) {
+                    const rgb = hexRgb(color); ctx.fillStyle = `rgba(${rgb},1)`;
+                    const ex = dir.x, ey = dir.y, cx = seg.x * CELL + CELL / 2, cy = seg.y * CELL + CELL / 2;
+                    const offs = ex !== 0 ? [{ x: ex * 4, y: -3 }, { x: ex * 4, y: 3 }] : [{ x: -3, y: ey * 4 }, { x: 3, y: ey * 4 }];
+                    offs.forEach(o => ctx.fillRect(cx + o.x - 1, cy + o.y - 1, 3, 3));
+                }
+            });
+        }
+        function drawFruit() {
+            if (!fruit) return;
+            const p = 0.7 + 0.3 * Math.sin(Date.now() / 500), rgb = hexRgb(fruitHex);
+            ctx.shadowColor = `rgba(${rgb},${p})`; ctx.shadowBlur = 20 * p; ctx.fillStyle = `rgba(${rgb},${p})`;
+            const px = fruit.x * CELL, py = fruit.y * CELL;
+            ctx.fillRect(px + CELL / 2 - 2, py + 2, 4, 4); ctx.fillRect(px + 2, py + CELL / 2 - 2, 4, 4);
+            ctx.fillRect(px + CELL / 2 - 2, py + CELL - 6, 4, 4); ctx.fillRect(px + CELL - 6, py + CELL / 2 - 2, 4, 4);
+            ctx.fillRect(px + CELL / 2 - 2, py + CELL / 2 - 2, 4, 4); ctx.shadowBlur = 0;
+        }
+        function drawLevelFlash() {
+            const e = Date.now() - levelFlashTime; if (e > 1800) return;
+            const a = Math.pow(1 - e / 1800, 1.5);
+            ctx.save(); ctx.globalAlpha = a; ctx.font = `bold ${CELL * 2}px Courier New`;
+            ctx.textAlign = 'center'; ctx.shadowColor = accentHex; ctx.shadowBlur = 30; ctx.fillStyle = accentHex;
+            ctx.fillText(`LEVEL ${level}`, canvas.width / 2, canvas.height / 2); ctx.restore();
+        }
+
+        // ── input: keyboard ───────────────────────────────────────────────────────
+        function applyDir(dx, dy) { if (dx === -dir.x && dy === -dir.y) return; nextDir = { x: dx, y: dy }; }
+
+        document.addEventListener('keydown', e => {
+            if (e.code === 'Space') { if (paused) { togglePause(); return; } if (!running) start(); return; }
+            if (e.code === 'KeyP') { togglePause(); return; }
+            if (e.code === 'KeyM') { toggleMute(); return; }
+            if (paused) return;
+            const map = {
+                ArrowUp: { x: 0, y: -1 }, KeyW: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, KeyS: { x: 0, y: 1 },
+                ArrowLeft: { x: -1, y: 0 }, KeyA: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, KeyD: { x: 1, y: 0 }
+            };
+            const d = map[e.code]; if (!d) return;
+            applyDir(d.x, d.y); e.preventDefault();
+        });
+
+        // ── input: swipe on canvas ────────────────────────────────────────────────
+        let swipeTouchId = null, swipeX = 0, swipeY = 0;
+
+        canvas.addEventListener('touchstart', e => {
+            if (mobileMode) return;
+            if (swipeTouchId !== null) return;
+            const t = e.changedTouches[0];
+            swipeTouchId = t.identifier; swipeX = t.clientX; swipeY = t.clientY;
+            if (!running) start();
+            e.preventDefault();
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', e => {
+            if (mobileMode) return;
+            for (const t of e.changedTouches) {
+                if (t.identifier !== swipeTouchId) continue;
+                swipeTouchId = null;
+                const dx = t.clientX - swipeX, dy = t.clientY - swipeY;
+                if (Math.max(Math.abs(dx), Math.abs(dy)) < 40) return;
+                if (Math.abs(dx) > Math.abs(dy)) applyDir(dx > 0 ? 1 : -1, 0);
+                else applyDir(0, dy > 0 ? 1 : -1);
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        // ── input: joystick ───────────────────────────────────────────────────────
+        const joyBase = document.getElementById('joy-base');
+        const joyThumb = document.getElementById('joy-thumb');
+        const JOY_R = 70;   // max thumb travel (px)
+        const JOY_DEAD = 14;   // dead zone (px)
+        let joyId = null, joyCX = 0, joyCY = 0;
+
+        joyBase.addEventListener('touchstart', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (joyId !== null) return;
+            const t = e.changedTouches[0];
+            joyId = t.identifier;
+            const r = joyBase.getBoundingClientRect();
+            joyCX = r.left + r.width / 2; joyCY = r.top + r.height / 2;
+            if (!running) start();
+            moveThumb(t.clientX, t.clientY);
+        }, { passive: false });
+
+        document.addEventListener('touchmove', e => {
+            if (joyId === null) return;
+            for (const t of e.changedTouches) {
+                if (t.identifier !== joyId) continue;
+                e.preventDefault();
+                moveThumb(t.clientX, t.clientY);
+                break;
+            }
+        }, { passive: false });
+
+        document.addEventListener('touchend', e => {
+            for (const t of e.changedTouches) {
+                if (t.identifier !== joyId) continue;
+                joyId = null;
+                joyThumb.style.transform = 'translate(-50%,-50%)';
+                break;
+            }
+        }, { passive: false });
+
+        document.addEventListener('touchcancel', e => {
+            if (joyId === null) return;
+            for (const t of e.changedTouches) {
+                if (t.identifier !== joyId) continue;
+                joyId = null; joyThumb.style.transform = 'translate(-50%,-50%)'; break;
+            }
+        }, { passive: false });
+
+        function moveThumb(cx, cy) {
+            let dx = cx - joyCX, dy = cy - joyCY;
+            const dist = Math.hypot(dx, dy);
+            if (dist > JOY_R) { dx = dx / dist * JOY_R; dy = dy / dist * JOY_R; }
+            joyThumb.style.transform = `translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;
+            if (running && dist > JOY_DEAD) {
+                if (Math.abs(dx) > Math.abs(dy)) applyDir(dx > 0 ? 1 : -1, 0);
+                else applyDir(0, dy > 0 ? 1 : -1);
+            }
+        }
+
+        // ── boot ──────────────────────────────────────────────────────────────────
+        applyMobileMode();
+        init();
+        draw();
+
+        (function loop() {
+            if (!running) draw();
+            updateBoostBar();
+            requestAnimationFrame(loop);
+        })();
+    </script>
+</body>
+
+</html>

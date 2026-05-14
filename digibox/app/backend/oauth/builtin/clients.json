@@ -1,0 +1,10 @@
+[
+    {
+        "id": "builtin:dropbox-default",
+        "clientId": "pnx28bxcdu3f6vu",
+        "secret": "09xi4nipgv2x9es",
+        "name": "Dropbox (Default App)",
+        "description": "Default Dropbox app shipped with the plugin",
+        "provider": "dropbox"
+    }
+]

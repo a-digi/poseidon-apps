@@ -1,0 +1,28 @@
+{
+  "id": "music",
+  "version": "1.0.1",
+  "name": "Music",
+  "description": "Local audio player and playlist manager.",
+  "author": "Andet Tafa",
+  "tags": [
+    "Music",
+    "Audio",
+    "Player",
+    "Playlist"
+  ],
+  "website": "https://example.com",
+  "filename": "index.html",
+  "minimal": {
+    "enabled": true,
+    "size": {
+      "width": 380,
+      "height": 150
+    },
+    "defaultPosition": "bottom-right"
+  },
+  "menu": {
+    "label": "Music",
+    "to": "/music",
+    "icon": "<svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><text x=\"12\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"11\" font-weight=\"bold\" font-family=\"sans-serif\" fill=\"currentColor\" stroke=\"none\">M</text></svg>"
+  }
+}
