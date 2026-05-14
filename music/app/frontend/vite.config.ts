@@ -13,6 +13,15 @@ export default defineConfig({
   build: {
     outDir: '../../ui',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'router': ['react-router-dom'],
+          'i18n': ['i18next', 'react-i18next'],
+        },
+      },
+    },
   },
   resolve: {
     alias: {

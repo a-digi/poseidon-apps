@@ -7,8 +7,8 @@ import { ToastProvider } from '@/components/Notification/ToastProvider';
 import { TopBarProvider, useTopBar } from '@/components/TopBar/TopBarContext';
 import { SidebarProvider } from '@/components/Layout/Sidebar/SidebarContext';
 import MusicPlayer from '@/components/Music/Player/MusicPlayer';
-import Playlist from '@/components/Music/Playlist/Playlist';
-import { Analytics } from '@/components/Music/Analytics';
+const Playlist = React.lazy(() => import('@/components/Music/Playlist/Playlist'));
+const Analytics = React.lazy(() => import('@/components/Music/Analytics/Analytics').then((m) => ({ default: m.Analytics })));
 import { pluginApi } from '@/api/pluginApi';
 import { subscribeMode, subscribeTabActive } from '@/lib/hostBridge';
 
@@ -106,13 +106,15 @@ const App: React.FC = () => {
             <SidebarProvider>
               <PluginShell minimal={mode === 'minimal'}>
                 {mode === 'full' && (
-                  <Routes>
-                    <Route path="/music/player" element={<></>} />
-                    <Route path="/music/playlist" element={<Playlist />} />
-                    <Route path="/music/analytics" element={<Analytics />} />
-                    <Route path="/" element={<Navigate to="/music/player" replace />} />
-                    <Route path="*" element={<Navigate to="/music/player" replace />} />
-                  </Routes>
+                  <React.Suspense fallback={null}>
+                    <Routes>
+                      <Route path="/music/player" element={<></>} />
+                      <Route path="/music/playlist" element={<Playlist />} />
+                      <Route path="/music/analytics" element={<Analytics />} />
+                      <Route path="/" element={<Navigate to="/music/player" replace />} />
+                      <Route path="*" element={<Navigate to="/music/player" replace />} />
+                    </Routes>
+                  </React.Suspense>
                 )}
                 <MusicPlayer mode={mode} />
               </PluginShell>

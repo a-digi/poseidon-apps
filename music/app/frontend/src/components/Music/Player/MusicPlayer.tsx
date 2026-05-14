@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { parseBlob } from 'music-metadata-browser';
 import Dropdown from '@/components/ui/Dropdown';
 import { useTranslation } from 'react-i18next';
 import Playlist from '@/components/Music/Player/Playlist';
@@ -207,6 +206,7 @@ const MusicPlayerInner: React.FC<MusicPlayerProps> = ({ mode }) => {
         if (/^https?:/.test(currentTrack.url)) {
           const response = await fetch(currentTrack.url);
           const blob = await response.blob();
+          const { parseBlob } = await import('music-metadata-browser');
           const metadata = await parseBlob(blob);
           const picture = metadata.common.picture?.[0];
           if (picture) {
