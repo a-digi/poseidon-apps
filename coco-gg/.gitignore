@@ -1,0 +1,7 @@
+data/
+dist/
+ui/
+app/.build/
+app/backend/coco-gg
+app/frontend/node_modules/
+app/frontend/dist/

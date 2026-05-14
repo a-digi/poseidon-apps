@@ -1,0 +1,33 @@
+{
+  "name": "coco-gg-plugin-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "clsx": "^1.2.1",
+    "lucide-react": "^1.16.0",
+    "phaser": "^3.90.0",
+    "qrcode": "^1.5.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^1.13.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "autoprefixer": "^10.4.12",
+    "postcss": "^8.4.17",
+    "tailwindcss": "^3.1.8",
+    "tailwindcss-animate": "^1.0.6",
+    "typescript": "^5.1.6",
+    "vite": "^4.3.9"
+  }
+}

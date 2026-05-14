@@ -1,0 +1,19 @@
+{
+  "id": "coco-gg",
+  "version": "0.1.0",
+  "name": "Coco GG",
+  "description": "2D multiplayer LAN game — join from any device by scanning a QR code.",
+  "author": "Andet Tafa",
+  "tags": [
+    "Game",
+    "Multiplayer",
+    "LAN"
+  ],
+  "website": "https://example.com",
+  "filename": "index.html",
+  "menu": {
+    "label": "Coco GG",
+    "to": "/coco-gg",
+    "icon": "<svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 8h12a4 4 0 0 1 4 4v4a3 3 0 0 1-5.4 1.8L15 15H9l-1.6 2.8A3 3 0 0 1 2 16v-4a4 4 0 0 1 4-4Z\"/><path d=\"M7 12v3\"/><path d=\"M5.5 13.5h3\"/><circle cx=\"16\" cy=\"12.5\" r=\"0.5\" fill=\"currentColor\"/><circle cx=\"18\" cy=\"14.5\" r=\"0.5\" fill=\"currentColor\"/></svg>"
+  }
+}
