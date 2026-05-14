@@ -2,10 +2,20 @@ const params = new URLSearchParams(window.location.search);
 const PLUGIN_ID = params.get('pluginId') ?? 'mbud';
 const BACKEND_URL = (params.get('backendUrl') ?? window.location.origin).replace(/\/$/, '');
 
+function mobileTokenHeader(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return {};
+  try {
+    const t = window.localStorage.getItem('mbud_mobile_token');
+    return t ? { 'X-Mobile-Token': t } : {};
+  } catch { return {}; }
+}
+
 export async function callPlugin<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
   const res = await fetch(`${BACKEND_URL}/api/plugins/execute`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...mobileTokenHeader() },
     body: JSON.stringify({ pluginName: PLUGIN_ID, params: { action, ...params } }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -268,7 +278,7 @@ export const deleteAttachment = (id: string) =>
   callPlugin<{ ok: true }>('delete_attachment', { id });
 
 export async function getLanAddresses(): Promise<string[]> {
-  const res = await fetch(`${BACKEND_URL}/api/system/lan-addresses`);
+  const res = await fetch(`${BACKEND_URL}/api/system/lan-addresses`, { headers: { ...mobileTokenHeader() } });
   if (!res.ok) return [];
   const json = await res.json() as { addresses?: string[] };
   return json.addresses ?? [];
@@ -283,3 +293,23 @@ export interface AttachmentBytes {
 
 export const getAttachmentBytes = (id: string) =>
   callPlugin<AttachmentBytes>('get_attachment_bytes', { id });
+
+export interface MobileSession { token: string; expiresAt: number; }
+
+export async function createMobileSession(pluginId: string, ttlSeconds = 3600): Promise<MobileSession> {
+  const resp = await fetch(`${BACKEND_URL}/api/mobile-sessions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pluginId, ttlSeconds }),
+  });
+  if (!resp.ok) throw new Error(`Failed to create session: ${resp.statusText}`);
+  return resp.json() as Promise<MobileSession>;
+}
+
+export async function revokeMobileSession(token: string): Promise<{ ok: true }> {
+  const resp = await fetch(`${BACKEND_URL}/api/mobile-sessions/${encodeURIComponent(token)}`, {
+    method: 'DELETE',
+  });
+  if (!resp.ok) throw new Error(`Failed to revoke session: ${resp.statusText}`);
+  return resp.json() as Promise<{ ok: true }>;
+}

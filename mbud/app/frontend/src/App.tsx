@@ -6,13 +6,15 @@ import { Tags } from './components/Tags';
 import { Invoices } from './components/Invoices';
 import { Recurring } from './components/Recurring';
 import { Upcoming } from './components/Upcoming';
+import { SharePhoneDialog } from './components/SharePhoneDialog';
 import './index.css';
 
 export default function App() {
   const [tab, setTab] = useState<TabKey>('business');
+  const [showShare, setShowShare] = useState(false);
   return (
     <div className="flex flex-col min-h-screen text-slate-900">
-      <TopBar active={tab} onChange={setTab} />
+      <TopBar active={tab} onChange={setTab} onSharePhone={() => setShowShare(true)} />
       <main className="p-6 flex flex-col gap-6">
         {tab === 'business' && <Businesses />}
         {tab === 'users' && <Users />}
@@ -21,6 +23,7 @@ export default function App() {
         {tab === 'recurring' && <Recurring />}
         {tab === 'upcoming' && <Upcoming />}
       </main>
+      {showShare && <SharePhoneDialog onClose={() => setShowShare(false)} />}
     </div>
   );
 }

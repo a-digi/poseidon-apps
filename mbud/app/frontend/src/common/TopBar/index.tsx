@@ -1,10 +1,11 @@
-import { Briefcase, CalendarClock, FileText, Repeat, Tag, Users } from 'lucide-react';
+import { Briefcase, CalendarClock, FileText, Repeat, Smartphone, Tag, Users } from 'lucide-react';
 
 export type TabKey = 'business' | 'users' | 'tags' | 'invoice' | 'recurring' | 'upcoming';
 
 interface TopBarProps {
   active: TabKey;
   onChange: (k: TabKey) => void;
+  onSharePhone: () => void;
 }
 
 interface TabDef {
@@ -22,7 +23,7 @@ const TABS: TabDef[] = [
   { key: 'upcoming',  label: 'Upcoming',    Icon: CalendarClock },
 ];
 
-export function TopBar({ active, onChange }: TopBarProps) {
+export function TopBar({ active, onChange, onSharePhone }: TopBarProps) {
   return (
     <header className="sticky top-0 z-10 bg-gray-50 border-b border-slate-200 px-6 flex items-center gap-6 h-14">
       <span className="text-base font-bold text-slate-900 shrink-0">Budgeting</span>
@@ -47,6 +48,11 @@ export function TopBar({ active, onChange }: TopBarProps) {
           );
         })}
       </nav>
+      <div className="ml-auto">
+        <button type="button" onClick={onSharePhone} aria-label="Open on phone" className="p-2 rounded-md text-slate-600 hover:bg-slate-200 transition-colors">
+          <Smartphone className="w-5 h-5" />
+        </button>
+      </div>
     </header>
   );
 }

@@ -10,6 +10,11 @@ if (_sp.get('mode') === 'mobile') {
     );
   });
 } else {
+  const _tok = _sp.get('t');
+  if (_tok) {
+    try { localStorage.setItem('mbud_mobile_token', _tok); } catch {}
+    history.replaceState(null, '', location.pathname);
+  }
   import('./App').then(({ default: App }) => {
     createRoot(document.getElementById('root')!).render(
       <StrictMode><App /></StrictMode>
