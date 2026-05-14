@@ -5,6 +5,8 @@ import { Dropdown } from '../../common/Dropdown';
 import { CURRENCY_OPTIONS } from '../../lib/currencies';
 import type { Business, Invoice, Tag, User } from '../../api';
 import { dateInputFromEpoch, epochFromDateInput } from '../../lib/format';
+import { AttachmentDialog } from './AttachmentDialog';
+import { InvoiceAttachments } from './InvoiceAttachments';
 
 interface InvoiceFormProps {
   initial: Invoice | null;
@@ -57,6 +59,8 @@ export function InvoiceForm({ initial, businesses, users, tags, onSave, onClose 
   const [invalid, setInvalid] = useState<Invalid>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showAttachmentDialog, setShowAttachmentDialog] = useState(false);
+  const [attachmentRefreshKey, setAttachmentRefreshKey] = useState(0);
 
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) => {
     setForm(prev => ({ ...prev, [k]: v }));
@@ -195,12 +199,25 @@ export function InvoiceForm({ initial, businesses, users, tags, onSave, onClose 
             Paid
           </label>
           {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</div>}
+          {initial !== null && (
+            <InvoiceAttachments invoiceId={initial.id} refreshKey={attachmentRefreshKey} />
+          )}
+          <button
+            type="button"
+            onClick={() => setShowAttachmentDialog(true)}
+            className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
+          >
+            Upload from phone
+          </button>
           <div className="flex justify-end gap-2 pt-2">
             <CancelButton onClick={onClose} disabled={busy} />
             <SaveButton loading={busy} />
           </div>
         </form>
       </div>
+      {showAttachmentDialog && (
+        <AttachmentDialog invoiceId={initial?.id} onClose={() => { setShowAttachmentDialog(false); setAttachmentRefreshKey(k => k + 1); }} />
+      )}
     </div>
   );
 }

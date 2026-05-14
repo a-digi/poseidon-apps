@@ -205,6 +205,25 @@ func InitSchema(db *sql.DB) error {
 			FOREIGN KEY (tag_id)      REFERENCES tags(id)              ON DELETE CASCADE
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_upcoming_tags_tag_id ON upcoming_tags(tag_id)`,
+		`CREATE TABLE IF NOT EXISTS upload_sessions (
+			id          TEXT    PRIMARY KEY,
+			invoice_id  TEXT,
+			status      TEXT    NOT NULL,
+			created_at  INTEGER NOT NULL,
+			expires_at  INTEGER NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_status_expires ON upload_sessions(status, expires_at)`,
+		`CREATE TABLE IF NOT EXISTS invoice_attachments (
+			id                TEXT    PRIMARY KEY,
+			invoice_id        TEXT,
+			session_id        TEXT    REFERENCES upload_sessions(id) ON DELETE SET NULL,
+			mime              TEXT    NOT NULL,
+			original_filename TEXT    NOT NULL,
+			size_bytes        INTEGER NOT NULL,
+			created_at        INTEGER NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_invoice_attachments_invoice ON invoice_attachments(invoice_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_invoice_attachments_session ON invoice_attachments(session_id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

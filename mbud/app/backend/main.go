@@ -48,6 +48,8 @@ func main() {
 	recurringTagsRepo := storage.NewRecurringTagsRepo(db)
 	upcomingTagsRepo := storage.NewUpcomingTagsRepo(db)
 	reconciler := recurringpkg.New(db, recRepo, upcomingRepo, invRepo, links, upcomingLinks, newID, func() int64 { return time.Now().Unix() })
+	uploadSessionRepo := storage.NewUploadSessionRepo(db)
+	attachmentRepo := storage.NewInvoiceAttachmentRepo(db)
 
 	h := &handlers{
 		dataDir:            dataDir,
@@ -68,6 +70,8 @@ func main() {
 		recurringTags:      recurringTagsRepo,
 		upcomingTags:       upcomingTagsRepo,
 		reconciler:         reconciler,
+		uploadSessions:     uploadSessionRepo,
+		attachments:        attachmentRepo,
 	}
 
 	action, _ := params["action"].(string)

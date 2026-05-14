@@ -40,6 +40,8 @@ type handlers struct {
 	recurringTags      *storage.RecurringTagsRepo
 	upcomingTags       *storage.UpcomingTagsRepo
 	reconciler         *recurringpkg.Reconciler
+	uploadSessions     *storage.UploadSessionRepo
+	attachments        *storage.InvoiceAttachmentRepo
 }
 
 const maxLogoBytes = 1024 * 1024
@@ -60,6 +62,8 @@ func extFromMime(mime string) string {
 		return "webp"
 	case "image/gif":
 		return "gif"
+	case "application/pdf":
+		return "pdf"
 	}
 	return ""
 }
@@ -202,6 +206,21 @@ func (h *handlers) dispatch(ctx context.Context, action string, params map[strin
 		return h.updateTag(ctx, params)
 	case "delete_tag":
 		return h.deleteTag(ctx, params)
+
+	case "create_upload_session":
+		return h.createUploadSession(ctx, params)
+	case "get_upload_session":
+		return h.getUploadSession(ctx, params)
+	case "mobile_upload_file":
+		return h.mobileUploadFile(ctx, params)
+	case "list_invoice_attachments":
+		return h.listInvoiceAttachments(ctx, params)
+	case "attach_session_to_invoice":
+		return h.attachSessionToInvoice(ctx, params)
+	case "delete_attachment":
+		return h.deleteAttachment(ctx, params)
+	case "get_attachment_bytes":
+		return h.getAttachmentBytes(ctx, params)
 
 	default:
 		return nil, errors.New("unknown action: " + action)
@@ -1209,6 +1228,249 @@ func (h *handlers) updateTag(ctx context.Context, params map[string]any) (any, e
 func (h *handlers) deleteTag(ctx context.Context, params map[string]any) (any, error) {
 	id, _ := params["id"].(string)
 	if err := h.tags.Delete(ctx, id); err != nil {
+		return nil, err
+	}
+	return map[string]any{"ok": true}, nil
+}
+
+// ── Upload Sessions & Attachments ─────────────────────────────────────────────
+
+func (h *handlers) createUploadSession(ctx context.Context, params map[string]any) (any, error) {
+	invoiceID, _ := params["invoiceId"].(string)
+	ttl := 600.0
+	if v, ok := params["ttlSeconds"].(float64); ok {
+		ttl = v
+	}
+	if ttl < 60 {
+		ttl = 60
+	} else if ttl > 3600 {
+		ttl = 3600
+	}
+	now := nowUnix()
+	session := model.UploadSession{
+		ID:        newID(),
+		InvoiceID: invoiceID,
+		Status:    "active",
+		CreatedAt: now,
+		ExpiresAt: now + int64(ttl),
+	}
+	if err := h.uploadSessions.Insert(ctx, session); err != nil {
+		return nil, err
+	}
+	return map[string]any{"token": session.ID, "expiresAt": session.ExpiresAt}, nil
+}
+
+func (h *handlers) getUploadSession(ctx context.Context, params map[string]any) (any, error) {
+	token, _ := params["token"].(string)
+	session, ok, err := h.uploadSessions.Get(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, errors.New("session not found")
+	}
+	attachments, err := h.attachments.ListBySession(ctx, session.ID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"session": session, "attachments": attachments}, nil
+}
+
+var allowedUploadMimes = map[string]struct{}{
+	"image/png":       {},
+	"image/jpeg":      {},
+	"image/webp":      {},
+	"application/pdf": {},
+}
+
+const maxAttachmentBytes = 15 * 1024 * 1024
+
+func (h *handlers) mobileUploadFile(ctx context.Context, params map[string]any) (any, error) {
+	token, _ := params["token"].(string)
+	filename, _ := params["filename"].(string)
+	contentType, _ := params["contentType"].(string)
+	dataBase64, _ := params["dataBase64"].(string)
+
+	session, ok, err := h.uploadSessions.Get(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if !ok || session.Status != "active" || session.ExpiresAt <= nowUnix() {
+		return nil, errors.New("session expired or not found")
+	}
+
+	if _, ok := allowedUploadMimes[contentType]; !ok {
+		return nil, errors.New("unsupported file type")
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(dataBase64)
+	if err != nil {
+		return nil, errors.New("invalid base64")
+	}
+	if len(decoded) > maxAttachmentBytes {
+		return nil, errors.New("file too large (max 15 MB)")
+	}
+
+	sanitisedFilename := filepath.Base(filename)
+
+	ext := extFromMime(contentType)
+
+	var folder string
+	if session.InvoiceID != "" {
+		folder = filepath.Join(h.dataDir, "invoices", session.InvoiceID)
+	} else {
+		folder = filepath.Join(h.dataDir, "invoices", session.ID)
+	}
+
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		return nil, err
+	}
+
+	attachmentID := newID()
+	finalPath := filepath.Join(folder, attachmentID+"."+ext)
+	tmpPath := finalPath + ".tmp"
+	if err := os.WriteFile(tmpPath, decoded, 0o644); err != nil {
+		return nil, err
+	}
+	if err := os.Rename(tmpPath, finalPath); err != nil {
+		return nil, err
+	}
+
+	a := model.Attachment{
+		ID:               attachmentID,
+		InvoiceID:        session.InvoiceID,
+		SessionID:        session.ID,
+		Mime:             contentType,
+		OriginalFilename: sanitisedFilename,
+		SizeBytes:        int64(len(decoded)),
+		CreatedAt:        nowUnix(),
+	}
+	if err := h.attachments.Insert(ctx, a); err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+func (h *handlers) listInvoiceAttachments(ctx context.Context, params map[string]any) (any, error) {
+	invoiceID, _ := params["invoiceId"].(string)
+	if invoiceID == "" {
+		return nil, errors.New("invoiceId is required")
+	}
+	return h.attachments.ListByInvoice(ctx, invoiceID)
+}
+
+func (h *handlers) attachSessionToInvoice(ctx context.Context, params map[string]any) (any, error) {
+	token, _ := params["token"].(string)
+	invoiceID, _ := params["invoiceId"].(string)
+	if token == "" {
+		return nil, errors.New("token is required")
+	}
+	if invoiceID == "" {
+		return nil, errors.New("invoiceId is required")
+	}
+
+	session, ok, err := h.uploadSessions.Get(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if !ok || session.Status != "active" {
+		return nil, errors.New("session not found or not active")
+	}
+
+	currentFolder := filepath.Join(h.dataDir, "invoices", session.ID)
+	targetFolder := filepath.Join(h.dataDir, "invoices", invoiceID)
+
+	if currentFolder != targetFolder {
+		if _, statErr := os.Stat(currentFolder); statErr == nil {
+			if err := os.MkdirAll(targetFolder, 0o755); err != nil {
+				return nil, err
+			}
+			entries, err := os.ReadDir(currentFolder)
+			if err != nil {
+				return nil, err
+			}
+			for _, e := range entries {
+				if e.IsDir() {
+					continue
+				}
+				src := filepath.Join(currentFolder, e.Name())
+				dst := filepath.Join(targetFolder, e.Name())
+				if err := os.Rename(src, dst); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	count, err := h.attachments.AttachToInvoice(ctx, session.ID, invoiceID)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.uploadSessions.MarkConsumed(ctx, session.ID); err != nil {
+		return nil, err
+	}
+	return map[string]any{"ok": true, "count": count}, nil
+}
+
+func (h *handlers) getAttachmentBytes(ctx context.Context, params map[string]any) (any, error) {
+	id, _ := params["id"].(string)
+	if id == "" {
+		return nil, errors.New("id is required")
+	}
+	a, ok, err := h.attachments.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, errors.New("attachment not found")
+	}
+	var folder string
+	if a.InvoiceID != "" {
+		folder = filepath.Join(h.dataDir, "invoices", a.InvoiceID)
+	} else {
+		folder = filepath.Join(h.dataDir, "invoices", a.SessionID)
+	}
+	fullPath := filepath.Join(folder, a.ID+"."+extFromMime(a.Mime))
+	b, err := os.ReadFile(fullPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > 20*1024*1024 {
+		return nil, errors.New("attachment too large to serve")
+	}
+	return map[string]any{
+		"id":               a.ID,
+		"mime":             a.Mime,
+		"originalFilename": a.OriginalFilename,
+		"dataBase64":       base64.StdEncoding.EncodeToString(b),
+	}, nil
+}
+
+func (h *handlers) deleteAttachment(ctx context.Context, params map[string]any) (any, error) {
+	id, _ := params["id"].(string)
+	if id == "" {
+		return nil, errors.New("id is required")
+	}
+
+	a, ok, err := h.attachments.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		var folder string
+		if a.InvoiceID != "" {
+			folder = filepath.Join(h.dataDir, "invoices", a.InvoiceID)
+		} else {
+			folder = filepath.Join(h.dataDir, "invoices", a.SessionID)
+		}
+		ext := extFromMime(a.Mime)
+		fullPath := filepath.Join(folder, a.ID+"."+ext)
+		if rmErr := os.Remove(fullPath); rmErr != nil && !os.IsNotExist(rmErr) {
+			return nil, rmErr
+		}
+	}
+
+	if err := h.attachments.Delete(ctx, id); err != nil {
 		return nil, err
 	}
 	return map[string]any{"ok": true}, nil

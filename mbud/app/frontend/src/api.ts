@@ -225,3 +225,61 @@ export const updateUpcoming = (id: string, upcoming: UpcomingInvoice) =>
   callPlugin<UpcomingInvoice>('update_upcoming', { id, upcoming });
 export const deleteUpcoming = (id: string) =>
   callPlugin<{ ok: true }>('delete_upcoming', { id });
+
+export interface UploadSession {
+  id: string;
+  invoiceId?: string;
+  status: 'active' | 'consumed' | 'expired';
+  createdAt: number;
+  expiresAt: number;
+}
+
+export interface Attachment {
+  id: string;
+  invoiceId?: string;
+  sessionId?: string;
+  mime: string;
+  originalFilename: string;
+  sizeBytes: number;
+  createdAt: number;
+}
+
+export interface UploadSessionResult {
+  session: UploadSession;
+  attachments: Attachment[];
+}
+
+export const createUploadSession = (invoiceId?: string, ttlSeconds = 600) =>
+  callPlugin<{ token: string; expiresAt: number }>('create_upload_session', { invoiceId, ttlSeconds });
+
+export const getUploadSession = (token: string) =>
+  callPlugin<UploadSessionResult>('get_upload_session', { token });
+
+export const mobileUploadFile = (token: string, filename: string, contentType: string, dataBase64: string) =>
+  callPlugin<Attachment>('mobile_upload_file', { token, filename, contentType, dataBase64 });
+
+export const listInvoiceAttachments = (invoiceId: string) =>
+  callPlugin<Attachment[]>('list_invoice_attachments', { invoiceId });
+
+export const attachSessionToInvoice = (token: string, invoiceId: string) =>
+  callPlugin<{ ok: true; count: number }>('attach_session_to_invoice', { token, invoiceId });
+
+export const deleteAttachment = (id: string) =>
+  callPlugin<{ ok: true }>('delete_attachment', { id });
+
+export async function getLanAddresses(): Promise<string[]> {
+  const res = await fetch(`${BACKEND_URL}/api/system/lan-addresses`);
+  if (!res.ok) return [];
+  const json = await res.json() as { addresses?: string[] };
+  return json.addresses ?? [];
+}
+
+export interface AttachmentBytes {
+  id: string;
+  mime: string;
+  originalFilename: string;
+  dataBase64: string;
+}
+
+export const getAttachmentBytes = (id: string) =>
+  callPlugin<AttachmentBytes>('get_attachment_bytes', { id });
