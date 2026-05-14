@@ -213,6 +213,8 @@ func (h *handlers) dispatch(ctx context.Context, action string, params map[strin
 		return h.getUploadSession(ctx, params)
 	case "mobile_upload_file":
 		return h.mobileUploadFile(ctx, params)
+	case "upload_invoice_attachment":
+		return h.uploadInvoiceAttachment(ctx, params)
 	case "list_invoice_attachments":
 		return h.listInvoiceAttachments(ctx, params)
 	case "attach_session_to_invoice":
@@ -1285,6 +1287,52 @@ var allowedUploadMimes = map[string]struct{}{
 
 const maxAttachmentBytes = 15 * 1024 * 1024
 
+func (h *handlers) writeAttachmentFile(ctx context.Context, invoiceID, sessionID, filename, contentType, dataBase64 string) (model.Attachment, error) {
+	if _, ok := allowedUploadMimes[contentType]; !ok {
+		return model.Attachment{}, errors.New("unsupported file type")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(dataBase64)
+	if err != nil {
+		return model.Attachment{}, errors.New("invalid base64")
+	}
+	if len(decoded) > maxAttachmentBytes {
+		return model.Attachment{}, errors.New("file too large (max 15 MB)")
+	}
+	sanitisedFilename := filepath.Base(filename)
+	ext := extFromMime(contentType)
+	var folder string
+	if invoiceID != "" {
+		folder = filepath.Join(h.dataDir, "invoices", invoiceID)
+	} else {
+		folder = filepath.Join(h.dataDir, "invoices", sessionID)
+	}
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		return model.Attachment{}, err
+	}
+	attachmentID := newID()
+	finalPath := filepath.Join(folder, attachmentID+"."+ext)
+	tmpPath := finalPath + ".tmp"
+	if err := os.WriteFile(tmpPath, decoded, 0o644); err != nil {
+		return model.Attachment{}, err
+	}
+	if err := os.Rename(tmpPath, finalPath); err != nil {
+		return model.Attachment{}, err
+	}
+	a := model.Attachment{
+		ID:               attachmentID,
+		InvoiceID:        invoiceID,
+		SessionID:        sessionID,
+		Mime:             contentType,
+		OriginalFilename: sanitisedFilename,
+		SizeBytes:        int64(len(decoded)),
+		CreatedAt:        nowUnix(),
+	}
+	if err := h.attachments.Insert(ctx, a); err != nil {
+		return model.Attachment{}, err
+	}
+	return a, nil
+}
+
 func (h *handlers) mobileUploadFile(ctx context.Context, params map[string]any) (any, error) {
 	token, _ := params["token"].(string)
 	filename, _ := params["filename"].(string)
@@ -1299,53 +1347,30 @@ func (h *handlers) mobileUploadFile(ctx context.Context, params map[string]any) 
 		return nil, errors.New("session expired or not found")
 	}
 
-	if _, ok := allowedUploadMimes[contentType]; !ok {
-		return nil, errors.New("unsupported file type")
-	}
-
-	decoded, err := base64.StdEncoding.DecodeString(dataBase64)
+	a, err := h.writeAttachmentFile(ctx, session.InvoiceID, session.ID, filename, contentType, dataBase64)
 	if err != nil {
-		return nil, errors.New("invalid base64")
-	}
-	if len(decoded) > maxAttachmentBytes {
-		return nil, errors.New("file too large (max 15 MB)")
-	}
-
-	sanitisedFilename := filepath.Base(filename)
-
-	ext := extFromMime(contentType)
-
-	var folder string
-	if session.InvoiceID != "" {
-		folder = filepath.Join(h.dataDir, "invoices", session.InvoiceID)
-	} else {
-		folder = filepath.Join(h.dataDir, "invoices", session.ID)
-	}
-
-	if err := os.MkdirAll(folder, 0o755); err != nil {
 		return nil, err
 	}
+	return a, nil
+}
 
-	attachmentID := newID()
-	finalPath := filepath.Join(folder, attachmentID+"."+ext)
-	tmpPath := finalPath + ".tmp"
-	if err := os.WriteFile(tmpPath, decoded, 0o644); err != nil {
-		return nil, err
+func (h *handlers) uploadInvoiceAttachment(ctx context.Context, params map[string]any) (any, error) {
+	invoiceID, _ := params["invoiceId"].(string)
+	filename, _ := params["filename"].(string)
+	contentType, _ := params["contentType"].(string)
+	dataBase64, _ := params["dataBase64"].(string)
+
+	if invoiceID == "" {
+		return nil, errors.New("invoiceId is required")
 	}
-	if err := os.Rename(tmpPath, finalPath); err != nil {
+	if _, ok, err := h.invoices.Get(ctx, invoiceID); err != nil {
 		return nil, err
+	} else if !ok {
+		return nil, errors.New("invoice not found")
 	}
 
-	a := model.Attachment{
-		ID:               attachmentID,
-		InvoiceID:        session.InvoiceID,
-		SessionID:        session.ID,
-		Mime:             contentType,
-		OriginalFilename: sanitisedFilename,
-		SizeBytes:        int64(len(decoded)),
-		CreatedAt:        nowUnix(),
-	}
-	if err := h.attachments.Insert(ctx, a); err != nil {
+	a, err := h.writeAttachmentFile(ctx, invoiceID, "", filename, contentType, dataBase64)
+	if err != nil {
 		return nil, err
 	}
 	return a, nil

@@ -313,3 +313,10 @@ export async function revokeMobileSession(token: string): Promise<{ ok: true }> 
   if (!resp.ok) throw new Error(`Failed to revoke session: ${resp.statusText}`);
   return resp.json() as Promise<{ ok: true }>;
 }
+
+export const uploadInvoiceAttachment = (
+  invoiceId: string,
+  filename: string,
+  contentType: string,
+  dataBase64: string,
+) => callPlugin<Attachment>('upload_invoice_attachment', { invoiceId, filename, contentType, dataBase64 });
