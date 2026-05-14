@@ -59,6 +59,9 @@ func (r *Room) step(tick int, dt float64) Snapshot {
 func (r *Room) fanout(msg []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.closed {
+		return
+	}
 	for _, p := range r.players {
 		select {
 		case p.SendCh <- msg:

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -25,11 +27,13 @@ func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// enforced at the host edge by the mobile-token middleware.
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
+		log.Printf("ws: accept failed (remote=%s err=%v)", r.RemoteAddr, err)
 		return
 	}
 	defer c.Close(websocket.StatusInternalError, "")
 
 	ctx := r.Context()
+	log.Printf("ws: connection opened (remote=%s)", r.RemoteAddr)
 
 	_, raw, err := c.Read(ctx)
 	if err != nil {
@@ -40,13 +44,25 @@ func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(ctx, c, "expected hello")
 		return
 	}
-	name := strings.TrimSpace(hello.Name)
-	if len(name) < 1 || len(name) > 32 {
+	log.Printf("ws: hello (remote=%s room=%q name=%q)", r.RemoteAddr, hello.Room, hello.Name)
+	trimmed := strings.TrimSpace(hello.Name)
+	if len(trimmed) < 1 || len(trimmed) > 32 {
+		log.Printf("ws: rejected hello (remote=%s reason=invalid_name name_len=%d)", r.RemoteAddr, len(trimmed))
 		writeError(ctx, c, "name must be 1-32 characters")
 		return
 	}
+	if strings.TrimSpace(hello.Room) == "" {
+		log.Printf("ws: rejected hello (remote=%s reason=empty_room)", r.RemoteAddr)
+		writeError(ctx, c, "room is required")
+		return
+	}
 
-	room, player, err := h.mgr.JoinOrCreate(hello.Room, name)
+	room, player, err := h.mgr.Join(hello.Room, trimmed)
+	if errors.Is(err, game.ErrUnknownRoom) {
+		log.Printf("ws: rejected hello (remote=%s room=%q reason=unknown_room)", r.RemoteAddr, hello.Room)
+		writeError(ctx, c, "unknown room")
+		return
+	}
 	if err != nil {
 		writeError(ctx, c, err.Error())
 		return
@@ -64,6 +80,7 @@ func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.mgr.Leave(room.Code, player.ID)
 		return
 	}
+	log.Printf("ws: welcome sent (remote=%s player_id=%s room=%s)", r.RemoteAddr, player.ID, room.Code)
 
 	writerDone := make(chan struct{})
 	go func() {
@@ -83,9 +100,11 @@ func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	var readErr error
 	for {
 		_, raw, err := c.Read(ctx)
 		if err != nil {
+			readErr = err
 			break
 		}
 		var in game.Input
@@ -96,9 +115,14 @@ func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.mgr.Leave(room.Code, player.ID)
-	close(player.SendCh)
+	player.CloseSend()
 	<-writerDone
 	c.Close(websocket.StatusNormalClosure, "")
+	if readErr != nil {
+		log.Printf("ws: disconnected (remote=%s player_id=%s room=%s err=%v)", r.RemoteAddr, player.ID, room.Code, readErr)
+	} else {
+		log.Printf("ws: disconnected (remote=%s player_id=%s room=%s)", r.RemoteAddr, player.ID, room.Code)
+	}
 }
 
 func writeError(ctx context.Context, c *websocket.Conn, msg string) {

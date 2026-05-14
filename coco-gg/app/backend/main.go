@@ -28,6 +28,13 @@ func main() {
 		log.Fatalf("[coco-gg] mkdir data dir: %v", err)
 	}
 
+	logFile, err := setupLogging(dataDir)
+	if err != nil {
+		log.Fatalf("setupLogging: %v", err)
+	}
+	defer logFile.Close()
+	log.Printf("main: starting (data_dir=%s)", dataDir)
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -43,14 +50,20 @@ func main() {
 	}
 	defer os.Remove(filepath.Join(dataDir, portFile))
 
-	log.Printf("[coco-gg] listening on 127.0.0.1:%d", port)
+	log.Printf("main: listening (addr=%s)", listener.Addr())
 
 	mgr := game.NewManager()
+	go mgr.StartSweeper(ctx)
 	wsh := NewWSHandler(mgr)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	mux.HandleFunc("GET /ws", wsh.ServeHTTP)
+	mux.HandleFunc("POST /api/rooms", CreateRoomHandler(mgr))
+	mux.HandleFunc("GET /api/rooms", ListRoomsHandler(mgr))
+	mux.HandleFunc("GET /api/rooms/{code}", GetRoomHandler(mgr))
+	mux.HandleFunc("DELETE /api/rooms/{code}", DestroyRoomHandler(mgr))
+	mux.HandleFunc("DELETE /api/rooms/{code}/players/{playerId}", KickPlayerHandler(mgr))
 
 	server := &http.Server{
 		Handler:     mux,
@@ -68,6 +81,7 @@ func main() {
 
 	select {
 	case <-ctx.Done():
+		log.Printf("main: signal received, shutting down")
 	case err := <-serveErr:
 		if err != nil {
 			log.Printf("[coco-gg] serve error: %v", err)
@@ -77,6 +91,7 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = server.Shutdown(shutdownCtx)
+	log.Printf("main: shutdown complete")
 }
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {

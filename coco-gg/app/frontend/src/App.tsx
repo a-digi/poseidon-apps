@@ -1,180 +1,214 @@
-import { useEffect, useRef, useState } from 'react';
-import { buildWsUrl, createMobileSession, getStatus, startPlugin, stopPlugin } from './api';
-import { Connection } from './game/net/Connection';
-import { PhaserGame } from './game/PhaserGame';
+import { useEffect, useState } from 'react';
+import {
+  startPlugin,
+  stopPlugin,
+  getStatus,
+  createRoom,
+  listRooms,
+  destroyRoom,
+  kickPlayer,
+  type RoomStatus,
+  type RoomsStats,
+} from './api';
 import { ShareDialog } from './components/ShareDialog';
+import { RoomCard } from './components/RoomCard';
 
-const MAX_NAME_LENGTH = 32;
+type Phase = 'idle' | 'starting' | 'live' | 'error';
 
-type Phase = 'idle' | 'starting' | 'hosting';
+function statusPillLabel(p: Phase): string {
+  return p === 'starting' ? 'starting…' : p;
+}
 
-const PHASE_LABEL: Record<Phase, string> = {
-  idle: 'idle',
-  starting: 'starting…',
-  hosting: 'hosting',
-};
+function statusPillClasses(p: Phase): string {
+  const base = 'px-3 py-1 rounded-full text-xs font-medium';
+  if (p === 'live') return `${base} bg-green-100 text-green-800`;
+  if (p === 'starting') return `${base} bg-amber-100 text-amber-800`;
+  if (p === 'error') return `${base} bg-red-100 text-red-800`;
+  return `${base} bg-slate-100 text-slate-700`;
+}
 
 function App() {
-  const [name, setName] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
-  const [roomCode, setRoomCode] = useState<string | null>(null);
-  const [connection, setConnection] = useState<Connection | null>(null);
-  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [rooms, setRooms] = useState<RoomStatus[]>([]);
+  const [stats, setStats] = useState<RoomsStats>({ activeRooms: 0, totalPlayers: 0 });
+  const [shareCode, setShareCode] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const connectionRef = useRef<Connection | null>(null);
+
+  async function refreshRooms() {
+    const result = await listRooms('coco-gg');
+    setRooms(result.rooms);
+    setStats(result.stats);
+  }
+
+  async function handleStart() {
+    setPhase('starting');
+    setErrorMessage(null);
+    try {
+      await startPlugin('coco-gg');
+      for (let i = 0; i < 10; i++) {
+        const s = await getStatus('coco-gg');
+        if (s.running) break;
+        await new Promise((r) => setTimeout(r, 500));
+        if (i === 9) throw new Error('plugin did not start within 5s');
+      }
+      setPhase('live');
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+      setPhase('idle');
+    }
+  }
+
+  async function handleCreateRoom() {
+    try {
+      const { code } = await createRoom('coco-gg');
+      setShareCode(code);
+      refreshRooms();
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleDestroyRoom(code: string) {
+    try {
+      await destroyRoom('coco-gg', code);
+      if (shareCode === code) setShareCode(null);
+      refreshRooms();
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleKick(code: string, playerId: string) {
+    try {
+      await kickPlayer('coco-gg', code, playerId);
+      refreshRooms();
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleStop() {
+    await Promise.all(rooms.map((r) => destroyRoom('coco-gg', r.code).catch(() => {})));
+    await stopPlugin('coco-gg').catch(() => {});
+    setPhase('idle');
+    setRooms([]);
+    setStats({ activeRooms: 0, totalPlayers: 0 });
+    setShareCode(null);
+    setErrorMessage(null);
+  }
 
   useEffect(() => {
-    connectionRef.current = connection;
-  }, [connection]);
+    if (phase !== 'live') return;
+    let failures = 0;
+    let cancelled = false;
+
+    async function tick() {
+      if (cancelled) return;
+      try {
+        await refreshRooms();
+        failures = 0;
+      } catch {
+        failures += 1;
+        if (failures >= 3) {
+          setErrorMessage('Lost contact with the plugin — try Stop and Start again.');
+          setPhase('error');
+        }
+      }
+    }
+
+    tick();
+    const id = setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+    // refreshRooms is defined at component scope and only invokes stable state
+    // setters; adding it to deps would re-run the effect every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   useEffect(() => {
     return () => {
-      connectionRef.current?.disconnect();
       // Closing the tab without clicking Stop must not leak a server process.
       stopPlugin('coco-gg').catch(() => {});
     };
   }, []);
 
-  const canStart = name.trim().length > 0 && phase === 'idle';
-
-  const cleanup = () => {
-    connectionRef.current?.disconnect();
-    // Best-effort: a stop failure shouldn't block the UI; the plugin will be cleaned up at app shutdown.
-    stopPlugin('coco-gg').catch(() => {});
-    connectionRef.current = null;
-    setConnection(null);
-    setRoomCode(null);
-    setShowShareDialog(false);
-    setPhase('idle');
-  };
-
-  const handleStart = async () => {
-    setErrorMessage(null);
-    setPhase('starting');
-    try {
-      await startPlugin('coco-gg');
-
-      for (let i = 0; i < 10; i++) {
-        const s = await getStatus('coco-gg');
-        if (s.running) break;
-        await new Promise((res) => setTimeout(res, 500));
-        if (i === 9) throw new Error('plugin did not start within 5s');
-      }
-
-      const session = await createMobileSession('coco-gg');
-      const wsUrl = buildWsUrl('localhost:2014', '', session.token);
-      const conn = new Connection(wsUrl, {
-        onWelcome: (msg) => {
-          setRoomCode(msg.room);
-          setPhase('hosting');
-          setShowShareDialog(true);
-        },
-        onError: (msg) => {
-          setErrorMessage(msg.message);
-          cleanup();
-        },
-        onClose: () => {
-          /* PhaserGame swaps callbacks once mounted; until then we just drop. */
-        },
-      });
-      conn.connect();
-      conn.sendHello('', name.trim());
-      connectionRef.current = conn;
-      setConnection(conn);
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : String(err));
-      setPhase('idle');
-    }
-  };
-
-  const handleStop = () => {
-    cleanup();
-  };
+  const subline =
+    phase === 'live'
+      ? `${stats.activeRooms} active room${stats.activeRooms === 1 ? '' : 's'} · ${stats.totalPlayers} player${stats.totalPlayers === 1 ? '' : 's'} online`
+      : phase === 'idle'
+        ? 'Server is not running.'
+        : phase === 'starting'
+          ? 'Starting plugin…'
+          : 'Server error — try Stop and Start again.';
 
   return (
-    <div className="min-h-screen bg-white text-slate-900">
-      <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-        <h1 className="text-xl font-semibold">Coco GG</h1>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-          {PHASE_LABEL[phase]}
-        </span>
+    <div className="min-h-screen bg-slate-50">
+      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Coco GG · Server Dashboard</h1>
+          <p className="text-sm text-slate-500 mt-1">{subline}</p>
+        </div>
+        <span className={statusPillClasses(phase)}>{statusPillLabel(phase)}</span>
       </header>
 
-      <main className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
-        {errorMessage !== null && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      <main className="p-6 max-w-3xl mx-auto">
+        {errorMessage && (
+          <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
             {errorMessage}
           </div>
         )}
 
-        {phase === 'idle' && (
-          <>
-            <div className="flex flex-col gap-2">
-              <label htmlFor="player-name" className="text-sm font-medium text-slate-700">
-                Your name
-              </label>
-              <input
-                id="player-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={MAX_NAME_LENGTH}
-                placeholder="Your name"
-                className="w-full max-w-sm rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
-              />
-            </div>
-
-            <div>
+        <div className="flex gap-3 mb-6">
+          {phase === 'idle' && (
+            <button
+              type="button"
+              onClick={handleStart}
+              className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+            >
+              Start server
+            </button>
+          )}
+          {phase === 'live' && (
+            <>
               <button
                 type="button"
-                onClick={handleStart}
-                disabled={!canStart}
-                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                onClick={handleCreateRoom}
+                className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
               >
-                Start game
-              </button>
-            </div>
-          </>
-        )}
-
-        {phase === 'starting' && (
-          <div className="flex items-center gap-3 text-sm text-slate-600">
-            <div className="w-5 h-5 border-2 border-slate-200 border-t-slate-600 rounded-full animate-spin" />
-            Starting…
-          </div>
-        )}
-
-        {phase === 'hosting' && connection !== null && (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setShowShareDialog(true)}
-                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
-              >
-                Share
+                + Create room
               </button>
               <button
                 type="button"
                 onClick={handleStop}
-                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="ml-auto px-4 py-2 rounded-md border border-slate-300 bg-white text-sm text-slate-700 hover:bg-slate-50"
               >
-                Stop
+                Stop server
               </button>
-              {roomCode !== null && (
-                <span className="text-sm text-slate-600">
-                  Room <span className="font-mono font-semibold text-slate-900">{roomCode}</span>
-                </span>
-              )}
-            </div>
+            </>
+          )}
+        </div>
 
-            <PhaserGame connection={connection} mode="desktop" />
-          </div>
+        {phase === 'live' && rooms.length === 0 && (
+          <p className="text-sm text-slate-500 italic">
+            No rooms yet — click "Create room" to get started.
+          </p>
         )}
+
+        {rooms.map((room) => (
+          <RoomCard
+            key={room.code}
+            room={room}
+            onShareQR={setShareCode}
+            onDestroy={handleDestroyRoom}
+            onKick={handleKick}
+          />
+        ))}
       </main>
 
-      {showShareDialog && roomCode !== null && (
-        <ShareDialog roomCode={roomCode} onClose={() => setShowShareDialog(false)} />
+      {shareCode && rooms.some((r) => r.code === shareCode) && (
+        <ShareDialog roomCode={shareCode} onClose={() => setShareCode(null)} />
       )}
     </div>
   );

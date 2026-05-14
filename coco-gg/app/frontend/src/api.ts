@@ -12,6 +12,31 @@ export interface LongRunningStatus {
   exitCode?: number;
 }
 
+export interface RoomCreated {
+  code: string;
+}
+
+export interface PlayerRef {
+  id: string;
+  name: string;
+}
+
+export interface RoomStatus {
+  code: string;
+  players: PlayerRef[];
+  createdAt: number;
+}
+
+export interface RoomsStats {
+  activeRooms: number;
+  totalPlayers: number;
+}
+
+export interface RoomsList {
+  rooms: RoomStatus[];
+  stats: RoomsStats;
+}
+
 export async function startPlugin(pluginId: string): Promise<LongRunningStatus> {
   const r = await fetch(`${HOST}/api/plugins/long-running/start`, {
     method: 'POST',
@@ -47,6 +72,43 @@ export async function getStatus(pluginId: string): Promise<LongRunningStatus> {
     throw new Error(typeof env.message === 'string' ? env.message : 'getStatus failed');
   }
   return env.message as LongRunningStatus;
+}
+
+export async function createRoom(pluginId: string): Promise<RoomCreated> {
+  const r = await fetch(`${HOST}/plugins/${encodeURIComponent(pluginId)}/api/rooms`, {
+    method: 'POST',
+  });
+  if (!r.ok) throw new Error(`createRoom: ${r.statusText}`);
+  return r.json() as Promise<RoomCreated>;
+}
+
+export async function listRooms(pluginId: string): Promise<RoomsList> {
+  const r = await fetch(`${HOST}/plugins/${encodeURIComponent(pluginId)}/api/rooms`);
+  if (!r.ok) throw new Error(`listRooms: ${r.statusText}`);
+  return r.json() as Promise<RoomsList>;
+}
+
+export async function getRoom(pluginId: string, code: string): Promise<RoomStatus | null> {
+  const r = await fetch(
+    `${HOST}/plugins/${encodeURIComponent(pluginId)}/api/rooms/${encodeURIComponent(code)}`,
+  );
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`getRoom: ${r.statusText}`);
+  return r.json() as Promise<RoomStatus>;
+}
+
+export async function destroyRoom(pluginId: string, code: string): Promise<void> {
+  const r = await fetch(
+    `${HOST}/plugins/${encodeURIComponent(pluginId)}/api/rooms/${encodeURIComponent(code)}`,
+    { method: 'DELETE' },
+  );
+  if (!r.ok && r.status !== 404) throw new Error(`destroyRoom: ${r.statusText}`);
+}
+
+export async function kickPlayer(pluginId: string, code: string, playerId: string): Promise<void> {
+  const url = `${HOST}/plugins/${encodeURIComponent(pluginId)}/api/rooms/${encodeURIComponent(code)}/players/${encodeURIComponent(playerId)}`;
+  const r = await fetch(url, { method: 'DELETE' });
+  if (!r.ok && r.status !== 404) throw new Error(`kickPlayer: ${r.statusText}`);
 }
 
 export async function createMobileSession(

@@ -8,6 +8,10 @@ export interface ConnectionCallbacks {
   onClose?: () => void;
 }
 
+export interface ConnectionOptions {
+  disableAutoReconnect?: boolean;
+}
+
 const BACKOFF_SCHEDULE_MS = [500, 1000, 2000, 4000, 5000] as const;
 
 /**
@@ -25,14 +29,17 @@ const BACKOFF_SCHEDULE_MS = [500, 1000, 2000, 4000, 5000] as const;
 export class Connection {
   private readonly url: string;
   private callbacks: ConnectionCallbacks;
+  private options: ConnectionOptions;
   private socket: WebSocket | null = null;
   private intentional = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingMessages: object[] = [];
 
-  constructor(url: string, callbacks: ConnectionCallbacks) {
+  constructor(url: string, callbacks: ConnectionCallbacks, options?: ConnectionOptions) {
     this.url = url;
     this.callbacks = callbacks;
+    this.options = options ?? {};
   }
 
   setCallbacks(callbacks: ConnectionCallbacks): void {
@@ -75,6 +82,14 @@ export class Connection {
 
     s.onopen = () => {
       this.reconnectAttempt = 0;
+      // Flush anything sent while the socket was still CONNECTING. Callers
+      // routinely do `connect(); sendHello(...)` back-to-back, which races
+      // the upgrade dance over Wi-Fi (passes on localhost, drops on LAN).
+      const queued = this.pendingMessages;
+      this.pendingMessages = [];
+      for (const msg of queued) {
+        try { s.send(JSON.stringify(msg)); } catch { /* socket closed mid-send */ }
+      }
     };
 
     s.onmessage = (event) => {
@@ -99,6 +114,7 @@ export class Connection {
       this.callbacks.onClose?.();
       const clean = event.wasClean && event.code === 1000;
       if (this.intentional || clean) return;
+      if (this.options.disableAutoReconnect) return;
       this.scheduleReconnect();
     };
   }
@@ -132,7 +148,11 @@ export class Connection {
   }
 
   private send(payload: object): void {
-    if (this.socket === null || this.socket.readyState !== WebSocket.OPEN) return;
+    if (this.socket === null || this.socket.readyState === WebSocket.CONNECTING) {
+      this.pendingMessages.push(payload);
+      return;
+    }
+    if (this.socket.readyState !== WebSocket.OPEN) return;
     try {
       this.socket.send(JSON.stringify(payload));
     } catch {

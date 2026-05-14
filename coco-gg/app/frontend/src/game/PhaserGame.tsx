@@ -3,10 +3,13 @@ import Phaser from 'phaser';
 import { Connection } from './net/Connection';
 import { ArenaScene } from './scenes/ArenaScene';
 import type { ArenaSceneInit, InputVector, MobileInputRef } from './scenes/ArenaScene';
+import type { ErrorMsg } from './types';
 
 interface PhaserGameProps {
   connection: Connection;
   mode: 'desktop' | 'mobile';
+  onError?: (msg: ErrorMsg) => void;
+  onClose?: () => void;
 }
 
 const ARENA_W = 800;
@@ -16,7 +19,7 @@ const JOYSTICK_THUMB_PX = 40;
 const JOYSTICK_RADIUS = JOYSTICK_OUTER_PX / 2;
 const DEAD_ZONE = 8;
 
-export function PhaserGame({ connection, mode }: PhaserGameProps) {
+export function PhaserGame({ connection, mode, onError, onClose }: PhaserGameProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<ArenaScene | null>(null);
@@ -84,8 +87,15 @@ export function PhaserGame({ connection, mode }: PhaserGameProps) {
       onLeft: (msg) => {
         sceneRef.current?.removePlayer(msg.playerId);
       },
+      onError,
+      onClose,
     });
-  }, [connection]);
+    return () => {
+      // Drop our closures so a late socket event can't fire into an unmounted
+      // scene after the playing phase ends.
+      connection.setCallbacks({});
+    };
+  }, [connection, onError, onClose]);
 
   const setThumb = (dx: number, dy: number) => {
     const thumb = thumbRef.current;

@@ -11,10 +11,11 @@ const (
 	MsgError    MessageType = "error"
 )
 
-// Hello is the first message a client must send. An empty Room means
-// "create a new room"; a non-empty Room means "join the room with that code"
-// (server replies with an error and closes if unknown). Name is required:
-// after trimming whitespace it must be 1-32 characters.
+// Hello is the first message a client must send. Room is REQUIRED and must be
+// non-empty: it names an existing room to join. Rooms can only be created via
+// the HTTP POST /api/rooms endpoint; an empty or unknown Room causes the server
+// to reply with an error and close. Name is required: after trimming whitespace
+// it must be 1-32 characters.
 type Hello struct {
 	Type MessageType `json:"type"`
 	Room string      `json:"room"`

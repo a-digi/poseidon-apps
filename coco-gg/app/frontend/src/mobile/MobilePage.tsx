@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { buildWsUrl } from '../api';
 import { Connection } from '../game/net/Connection';
 import { PhaserGame } from '../game/PhaserGame';
+import type { ErrorMsg } from '../game/types';
 
 const MAX_NAME_LENGTH = 32;
 
@@ -15,6 +16,8 @@ export function MobilePage() {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const connectionRef = useRef<Connection | null>(null);
+  const phaseRef = useRef<Phase>(phase);
+  const joinTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
@@ -31,7 +34,19 @@ export function MobilePage() {
   }, [connection]);
 
   useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
+  const clearJoinTimeout = () => {
+    if (joinTimeoutRef.current !== null) {
+      window.clearTimeout(joinTimeoutRef.current);
+      joinTimeoutRef.current = null;
+    }
+  };
+
+  useEffect(() => {
     return () => {
+      clearJoinTimeout();
       connectionRef.current?.disconnect();
     };
   }, []);
@@ -43,20 +58,73 @@ export function MobilePage() {
     setErrorMessage(null);
     setPhase('joining');
     const wsUrl = buildWsUrl(window.location.host, room, token);
-    const conn = new Connection(wsUrl, {
-      onWelcome: () => {
-        setPhase('playing');
+    const conn = new Connection(
+      wsUrl,
+      {
+        onWelcome: () => {
+          clearJoinTimeout();
+          setPhase('playing');
+        },
+        onError: (msg) => {
+          clearJoinTimeout();
+          setErrorMessage(msg.message);
+          conn.disconnect();
+          setPhase('name');
+        },
+        onClose: () => {
+          clearJoinTimeout();
+          if (phaseRef.current === 'joining') {
+            setErrorMessage('Connection lost before the server answered. Check that the plugin is running on the desktop.');
+            setPhase('name');
+          }
+        },
       },
-      onError: (msg) => {
-        setErrorMessage(msg.message);
-        conn.disconnect();
-        setPhase('name');
-      },
-    });
+      { disableAutoReconnect: true },
+    );
     conn.connect();
     conn.sendHello(room, name.trim());
+    joinTimeoutRef.current = window.setTimeout(() => {
+      joinTimeoutRef.current = null;
+      if (phaseRef.current === 'joining') {
+        conn.disconnect();
+        setErrorMessage('Timed out — the server did not respond in 8 seconds.');
+        setPhase('name');
+      }
+    }, 8000);
     connectionRef.current = conn;
     setConnection(conn);
+  };
+
+  const handleAbort = () => {
+    clearJoinTimeout();
+    connectionRef.current?.disconnect();
+    setErrorMessage('Cancelled.');
+    setPhase('name');
+  };
+
+  const handleLeave = () => {
+    connectionRef.current?.disconnect();
+    setConnection(null);
+    setErrorMessage('You left the room.');
+    setPhase('name');
+  };
+
+  const handleKickError = (msg: ErrorMsg) => {
+    connectionRef.current?.disconnect();
+    setConnection(null);
+    setErrorMessage(msg.message || 'You were kicked from the room.');
+    setPhase('name');
+  };
+
+  const handlePlayingClose = () => {
+    // Guard so this doesn't fire on top of an already-handled kick: when
+    // handleKickError calls disconnect, the socket onclose follows
+    // asynchronously, by which time phaseRef is already 'name'.
+    if (phaseRef.current !== 'playing') return;
+    connectionRef.current?.disconnect();
+    setConnection(null);
+    setErrorMessage('Disconnected from the room.');
+    setPhase('name');
   };
 
   if (token === null && phase === 'name') {
@@ -77,15 +145,35 @@ export function MobilePage() {
   if (phase === 'playing' && connection !== null) {
     return (
       <div className="fixed inset-0 bg-slate-100">
-        <PhaserGame connection={connection} mode="mobile" />
+        <PhaserGame
+          connection={connection}
+          mode="mobile"
+          onError={handleKickError}
+          onClose={handlePlayingClose}
+        />
+        <button
+          type="button"
+          onClick={handleLeave}
+          aria-label="Leave room"
+          className="absolute top-3 left-3 z-10 rounded-full bg-white/90 px-3 py-2 text-sm font-medium text-slate-700 shadow-md hover:bg-white"
+        >
+          ← Leave
+        </button>
       </div>
     );
   }
 
   if (phase === 'joining') {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-white">
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-white gap-4">
         <div className="w-10 h-10 border-4 border-slate-200 border-t-slate-700 rounded-full animate-spin" />
+        <button
+          type="button"
+          onClick={handleAbort}
+          className="text-sm text-slate-500 underline hover:text-slate-700"
+        >
+          Abort
+        </button>
       </div>
     );
   }
