@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"log"
+	"math"
 	"sort"
 )
 
@@ -204,31 +205,7 @@ func validateAndApplyPickStartingTile(state *GameState, playerID string, a Actio
 	if player == nil {
 		return ErrNotYourTurn
 	}
-	tile.OwnerID = playerID
-	tile.FoundedBy = playerID
-	civ := civilizationByID(state, player.CivilizationID)
-	if civ != nil {
-		tile.Name = civ.Name
-	}
-	tile.Yields = map[ResourceType]int{
-		ResourceCredits: 5,
-		ResourceSteel:   10,
-		ResourceFuel:    10,
-	}
-	tile.Garrison = buildStartingGarrison(state, player.CivilizationID)
-	player.Resources.add(ResourceBank{
-		ResourceCredits: 30,
-		ResourceSteel:   5,
-		ResourceFuel:    60,
-	})
-	state.emit(GameEvent{
-		Kind:      "pick_starting_tile",
-		ActorID:   playerID,
-		ActorName: player.Name,
-		TargetQ:   intPtr(a.Q),
-		TargetR:   intPtr(a.R),
-		TileName:  tile.Name,
-	})
+	setupCapital(state, player, tile)
 	advanceTilePick(state)
 	return nil
 }
@@ -250,6 +227,119 @@ func buildStartingGarrison(state *GameState, civID string) []GarrisonStack {
 		garrison = append(garrison, GarrisonStack{Type: ut, Level: 1, Count: count})
 	}
 	return garrison
+}
+
+func startingResourcesForCiv(civ *Civilization) ResourceBank {
+	if civ == nil || len(civ.UnitRoster) == 0 {
+		return ResourceBank{ResourceCredits: 30, ResourceSteel: 5, ResourceFuel: 60}
+	}
+	bank := ResourceBank{}
+	for _, ut := range civ.UnitRoster {
+		for r, v := range UnitCatalog[ut].Cost {
+			bank[r] += v
+		}
+	}
+	for r := range bank {
+		bank[r] *= 2
+	}
+	return bank
+}
+
+func setupCapital(state *GameState, player *PlayerState, tile *Tile) {
+	tile.OwnerID = player.ID
+	tile.FoundedBy = player.ID
+	civ := civilizationByID(state, player.CivilizationID)
+	if civ != nil {
+		tile.Name = civ.Name
+	}
+	tile.Yields = map[ResourceType]int{
+		ResourceCredits: 5,
+		ResourceSteel:   10,
+		ResourceFuel:    10,
+	}
+	tile.Garrison = buildStartingGarrison(state, player.CivilizationID)
+	player.Resources.add(startingResourcesForCiv(civ))
+	state.emit(GameEvent{
+		Kind:      "pick_starting_tile",
+		ActorID:   player.ID,
+		ActorName: player.Name,
+		TargetQ:   intPtr(tile.Q),
+		TargetR:   intPtr(tile.R),
+		TileName:  tile.Name,
+	})
+}
+
+func assignCapitalsBySector(state *GameState) {
+	if state.Board == nil {
+		return
+	}
+	active := []*PlayerState{}
+	for _, p := range state.Players {
+		if p.LeftGame || p.Disconnected {
+			continue
+		}
+		active = append(active, p)
+	}
+	n := len(active)
+	if n == 0 {
+		return
+	}
+
+	rotation := newRNG().Float64() * 2 * math.Pi
+	type tileInfo struct {
+		tile  *Tile
+		angle float64
+		dist  float64
+	}
+	infos := make([]tileInfo, 0, len(state.Board.Tiles))
+	for _, t := range state.Board.Tiles {
+		if t.OwnerID != "" {
+			continue
+		}
+		x := math.Sqrt(3) * (float64(t.Q) + float64(t.R)/2.0)
+		y := 1.5 * float64(t.R)
+		a := math.Atan2(y, x)
+		if a < 0 {
+			a += 2 * math.Pi
+		}
+		a = math.Mod(a-rotation+2*math.Pi, 2*math.Pi)
+		infos = append(infos, tileInfo{
+			tile:  t,
+			angle: a,
+			dist:  math.Sqrt(x*x + y*y),
+		})
+	}
+
+	binSize := 2 * math.Pi / float64(n)
+	for i, p := range active {
+		binStart := float64(i) * binSize
+		binEnd := binStart + binSize
+		var best *tileInfo
+		for k := range infos {
+			inf := &infos[k]
+			if inf.tile.OwnerID != "" {
+				continue
+			}
+			if inf.angle < binStart || inf.angle >= binEnd {
+				continue
+			}
+			if best == nil || inf.dist > best.dist {
+				best = inf
+			}
+		}
+		if best == nil {
+			for k := range infos {
+				if infos[k].tile.OwnerID == "" {
+					best = &infos[k]
+					break
+				}
+			}
+		}
+		if best == nil {
+			continue
+		}
+		setupCapital(state, p, best.tile)
+	}
 }
 
 func validateAndApplyRecruit(state *GameState, playerID string, a ActionRecruit) error {
@@ -1102,13 +1192,17 @@ func advanceCivPick(state *GameState) {
 			return
 		}
 	}
-	state.Phase = PhaseTilePick
+	assignCapitalsBySector(state)
+	state.Phase = PhasePlaying
+	state.RoundNumber = 1
+	state.PlayersActedThisRound = map[string]bool{}
 	for _, p := range state.Players {
 		if p.Disconnected || p.LeftGame {
 			continue
 		}
 		state.Current = &CurrentTurn{PlayerID: p.ID}
-		log.Printf("game: repko phase advance (phase=tile_pick first=%s)", p.ID)
+		applyTurnIncome(state, p.ID)
+		log.Printf("game: repko phase advance (phase=playing first=%s reason=civ_pick_done)", p.ID)
 		return
 	}
 	state.Current = nil

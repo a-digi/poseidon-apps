@@ -328,7 +328,7 @@ func (r *Room) StartGame() error {
 		log.Printf("game: repko start rejected (room=%s reason=not_enough_players players=%d)", code, count)
 		return ErrNotEnoughPlayers
 	}
-	board := NewBoard(newRNG())
+	board := NewBoard(newRNG(), len(r.players))
 	ps := make([]*PlayerState, 0, len(r.players))
 	for _, p := range r.players {
 		ps = append(ps, newPlayerState(p.ID, p.Name, p.Color))

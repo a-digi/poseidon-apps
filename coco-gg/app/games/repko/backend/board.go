@@ -19,40 +19,39 @@ const (
 	neutralYieldMultiplier = 8
 )
 
-func hexCoords() []Hex {
-	rows := []struct {
-		r    int
-		qMin int
-		qMax int
-	}{
-		{-3, 0, 2},
-		{-2, -1, 2},
-		{-1, -2, 2},
-		{0, -3, 2},
-		{1, -3, 1},
-		{2, -3, 0},
-		{3, -3, -1},
-	}
-	out := make([]Hex, 0, 30)
-	for _, row := range rows {
-		for q := row.qMin; q <= row.qMax; q++ {
-			out = append(out, Hex{Q: q, R: row.r})
+func generateHexCoords(radius int) []Hex {
+	out := make([]Hex, 0, 3*radius*radius+3*radius+1)
+	for q := -radius; q <= radius; q++ {
+		rMin := -radius
+		if -q-radius > rMin {
+			rMin = -q - radius
+		}
+		rMax := radius
+		if -q+radius < rMax {
+			rMax = -q + radius
+		}
+		for r := rMin; r <= rMax; r++ {
+			out = append(out, Hex{Q: q, R: r})
 		}
 	}
 	return out
 }
 
-func shuffleProductions(rng *rand.Rand) []ResourceType {
-	out := make([]ResourceType, 0, 30)
-	add := func(rt ResourceType, n int) {
-		for i := 0; i < n; i++ {
-			out = append(out, rt)
-		}
+func shuffleProductions(rng *rand.Rand, tileCount int) []ResourceType {
+	perResource := tileCount / 4
+	out := make([]ResourceType, 0, tileCount)
+	for i := 0; i < perResource; i++ {
+		out = append(out, ResourceCredits)
 	}
-	add(ResourceCredits, 8)
-	add(ResourceSteel, 8)
-	add(ResourceFuel, 8)
-	add(ResourceNone, 6)
+	for i := 0; i < perResource; i++ {
+		out = append(out, ResourceSteel)
+	}
+	for i := 0; i < perResource; i++ {
+		out = append(out, ResourceFuel)
+	}
+	for len(out) < tileCount {
+		out = append(out, ResourceNone)
+	}
 	rng.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
 	return out
 }
@@ -91,9 +90,17 @@ var noneNames = []string{
 	"Forgotten Bluff", "Crowsong", "Greywillow", "Salt Flats", "Empty Quarter",
 }
 
-func NewBoard(rng *rand.Rand) *Board {
-	coords := hexCoords()
-	productions := shuffleProductions(rng)
+func NewBoard(rng *rand.Rand, playerCount int) *Board {
+	tileTarget := 20 * playerCount
+	if tileTarget < 19 {
+		tileTarget = 19
+	}
+	radius := 2
+	for 3*radius*radius+3*radius+1 < tileTarget {
+		radius++
+	}
+	coords := generateHexCoords(radius)
+	productions := shuffleProductions(rng, len(coords))
 
 	gold := append([]string(nil), goldNames...)
 	iron := append([]string(nil), ironNames...)
