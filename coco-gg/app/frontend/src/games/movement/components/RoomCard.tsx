@@ -27,7 +27,7 @@ export function RoomCard(props: RoomCardProps) {
       <p className="text-xs text-slate-500">
         {playerLabel} · {age}
       </p>
-      <div className="mt-1">
+      <div className="mt-3">
         {room.players.length === 0 ? (
           <p className="text-xs text-slate-500 italic mb-1">(waiting for players)</p>
         ) : (
@@ -55,7 +55,7 @@ export function RoomCard(props: RoomCardProps) {
           aria-label={`Show QR code for room ${room.code}`}
           className="px-2 py-1 rounded bg-slate-900 text-xs font-medium text-white transition-colors hover:bg-slate-700"
         >
-          QR
+          QR (Invite Players)
         </button>
         <button
           type="button"

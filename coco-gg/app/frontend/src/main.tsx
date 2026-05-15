@@ -29,7 +29,7 @@ if (sp.get('mode') === 'mobile') {
     if (descriptor === undefined) {
       createRoot(rootEl).render(
         <StrictMode>
-          <div className="fixed inset-0 flex items-center justify-center p-1text-center text-slate-700">
+          <div className="fixed inset-0 flex items-center justify-center p-2 text-center text-slate-700">
             <p>Unknown game. Open a fresh QR code from the desktop.</p>
           </div>
         </StrictMode>,
