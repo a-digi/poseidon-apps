@@ -1,8 +1,17 @@
-import { useEffect, useState, Suspense, lazy } from 'react';
+import { useEffect, useState, Suspense, lazy, type ComponentType } from 'react';
 import { Play, Square } from 'lucide-react';
-import { startPlugin, stopPlugin, getStatus } from './api';
+import {
+  startPlugin,
+  stopPlugin,
+  getStatus,
+  getServerConfig,
+  getAdminToken,
+  clearAdminToken,
+  type ServerConfig,
+} from './api';
 import { GAMES } from './games-registry';
 import { GameCard } from './GameCard';
+import { AdminLogin } from './AdminLogin';
 
 type Phase = 'idle' | 'starting' | 'live' | 'error';
 
@@ -20,14 +29,19 @@ function statusPillClasses(p: Phase): string {
 
 interface ActiveGameSlotProps {
   gameId: string;
+  config: ServerConfig;
 }
 
-function ActiveGameSlot({ gameId }: ActiveGameSlotProps) {
+interface GameAppProps {
+  config: ServerConfig;
+}
+
+function ActiveGameSlot({ gameId, config }: ActiveGameSlotProps) {
   const descriptor = GAMES.find((g) => g.id === gameId);
   if (descriptor === undefined) {
     return <p className="text-sm text-slate-500 italic">Unknown game.</p>;
   }
-  const GameApp = lazy(descriptor.loadApp);
+  const GameApp = lazy(descriptor.loadApp) as unknown as ComponentType<GameAppProps>;
   return (
     <Suspense
       fallback={
@@ -36,7 +50,7 @@ function ActiveGameSlot({ gameId }: ActiveGameSlotProps) {
         </div>
       }
     >
-      <GameApp />
+      <GameApp config={config} />
     </Suspense>
   );
 }
@@ -45,6 +59,8 @@ function ServerShell() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [config] = useState<ServerConfig>(() => getServerConfig());
+  const [authenticated, setAuthenticated] = useState<boolean>(() => getAdminToken() !== null);
 
   async function handleStart() {
     setPhase('starting');
@@ -76,6 +92,10 @@ function ServerShell() {
       stopPlugin().catch(() => { });
     };
   }, []);
+
+  if (config.mode === 'remote' && !authenticated) {
+    return <AdminLogin onAuthenticated={() => setAuthenticated(true)} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -122,6 +142,15 @@ function ServerShell() {
             Stop server
           </button>
         )}
+        {config.mode === 'remote' && (
+          <button
+            type="button"
+            onClick={() => { clearAdminToken(); setAuthenticated(false); }}
+            className="text-xs text-slate-500 hover:text-slate-900"
+          >
+            Sign out
+          </button>
+        )}
       </header>
 
       <main className="max-w-full p-2">
@@ -147,7 +176,9 @@ function ServerShell() {
             </div>
           ))}
 
-        {phase === 'live' && activeGameId !== null && <ActiveGameSlot gameId={activeGameId} />}
+        {phase === 'live' && activeGameId !== null && (
+          <ActiveGameSlot gameId={activeGameId} config={config} />
+        )}
       </main>
     </div>
   );

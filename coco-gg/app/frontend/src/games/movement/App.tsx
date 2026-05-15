@@ -8,10 +8,15 @@ import {
   type RoomStatus,
   type RoomsStats,
 } from './api';
+import type { ServerConfig } from '../../shell/api';
 import { ShareDialog } from './components/ShareDialog';
 import { RoomCard } from './components/RoomCard';
 
-function App() {
+interface AppProps {
+  config?: ServerConfig;
+}
+
+function App({ config }: AppProps) {
   const [rooms, setRooms] = useState<RoomStatus[]>([]);
   const [stats, setStats] = useState<RoomsStats>({ activeRooms: 0, totalPlayers: 0 });
   const [shareCode, setShareCode] = useState<string | null>(null);
@@ -118,7 +123,7 @@ function App() {
       ))}
 
       {shareCode !== null && rooms.some((r) => r.code === shareCode) && (
-        <ShareDialog roomCode={shareCode} onClose={() => setShareCode(null)} />
+        <ShareDialog roomCode={shareCode} onClose={() => setShareCode(null)} config={config} />
       )}
     </div>
   );

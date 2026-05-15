@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import QRCode from 'qrcode';
-import { getLanAddresses, createMobileSession } from '../../../shell/api';
+import { getLanAddresses, createMobileSession, type ServerConfig } from '../../../shell/api';
 
 interface ShareDialogProps {
   roomCode: string;
   onClose: () => void;
+  config?: ServerConfig;
 }
 
 type Phase =
@@ -13,7 +14,7 @@ type Phase =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; url: string; qrDataUrl: string; expiresAt: number };
 
-export function ShareDialog({ roomCode, onClose }: ShareDialogProps) {
+export function ShareDialog({ roomCode, onClose, config }: ShareDialogProps) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [copied, setCopied] = useState(false);
 
@@ -22,22 +23,26 @@ export function ShareDialog({ roomCode, onClose }: ShareDialogProps) {
 
     async function init() {
       try {
-        const [addresses, session] = await Promise.all([
-          getLanAddresses(),
-          createMobileSession(),
-        ]);
-
+        const baseUrl = config?.baseUrl ?? null;
+        const session = await createMobileSession();
         if (cancelled) return;
 
-        if (addresses.length === 0) {
-          setPhase({
-            kind: 'error',
-            message: 'No LAN address found. Connect the desktop to a Wi-Fi network and try again.',
-          });
-          return;
+        let url: string;
+        if (baseUrl !== null) {
+          url = `${baseUrl}/plugins/coco-gg/?mode=mobile&game=movement&t=${session.token}&room=${roomCode}`;
+        } else {
+          const addresses = await getLanAddresses();
+          if (cancelled) return;
+          if (addresses.length === 0) {
+            setPhase({
+              kind: 'error',
+              message: 'No LAN address found. Connect the desktop to a Wi-Fi network and try again.',
+            });
+            return;
+          }
+          url = `http://${addresses[0]}:2014/plugins/coco-gg/?mode=mobile&game=movement&t=${session.token}&room=${roomCode}`;
         }
 
-        const url = `http://${addresses[0]}:2014/plugins/coco-gg/?mode=mobile&game=movement&t=${session.token}&room=${roomCode}`;
         const qrDataUrl = await QRCode.toDataURL(url, {
           errorCorrectionLevel: 'M',
           margin: 2,
@@ -61,7 +66,7 @@ export function ShareDialog({ roomCode, onClose }: ShareDialogProps) {
     return () => {
       cancelled = true;
     };
-  }, [roomCode]);
+  }, [roomCode, config]);
 
   const handleCopy = () => {
     if (phase.kind !== 'ready') return;

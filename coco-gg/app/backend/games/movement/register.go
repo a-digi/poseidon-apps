@@ -2,26 +2,26 @@ package movement
 
 import (
 	"context"
-	"net/http"
 
 	"coco-gg-plugin/gamemeta"
+	"coco-gg-plugin/runtime"
 )
 
-// Register mounts the movement game's HTTP and WebSocket handlers on the
-// shared mux, starts its sweeper goroutine, and returns the metadata to be
-// advertised via GET /api/games.
-func Register(ctx context.Context, mux *http.ServeMux) gamemeta.Info {
+// Register mounts the movement game's HTTP and WebSocket handlers via the
+// role-aware runtime.Router, starts its sweeper goroutine, and returns the
+// metadata to be advertised via GET /api/games.
+func Register(ctx context.Context, r runtime.Router) gamemeta.Info {
 	mgr := NewManager()
 	go mgr.StartSweeper(ctx)
 
 	wsh := newWSHandler(mgr)
-	mux.HandleFunc("GET /ws/games/movement", wsh.ServeHTTP)
+	r.Public("GET /ws/games/movement", wsh)
 
-	mux.HandleFunc("POST /api/games/movement/rooms", createRoomHandler(mgr))
-	mux.HandleFunc("GET /api/games/movement/rooms", listRoomsHandler(mgr))
-	mux.HandleFunc("GET /api/games/movement/rooms/{code}", getRoomHandler(mgr))
-	mux.HandleFunc("DELETE /api/games/movement/rooms/{code}", destroyRoomHandler(mgr))
-	mux.HandleFunc("DELETE /api/games/movement/rooms/{code}/players/{playerId}", kickPlayerHandler(mgr))
+	r.Admin("POST /api/games/movement/rooms", createRoomHandler(mgr))
+	r.Admin("GET /api/games/movement/rooms", listRoomsHandler(mgr))
+	r.Admin("GET /api/games/movement/rooms/{code}", getRoomHandler(mgr))
+	r.Admin("DELETE /api/games/movement/rooms/{code}", destroyRoomHandler(mgr))
+	r.Admin("DELETE /api/games/movement/rooms/{code}/players/{playerId}", kickPlayerHandler(mgr))
 
 	return gamemeta.Info{
 		ID:          "movement",
