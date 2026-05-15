@@ -21,12 +21,6 @@ const (
 
 type UnitType string
 
-const (
-	UnitInfantry UnitType = "infantry"
-	UnitArmor    UnitType = "armor"
-	UnitJet      UnitType = "jet"
-)
-
 type UnitLevel int
 
 type GarrisonStack struct {
@@ -43,6 +37,8 @@ type Civilization struct {
 	Flag            string           `json:"flag"`
 	CoatOfArms      string           `json:"coatOfArms"`
 	StartingLoadout map[UnitType]int `json:"startingLoadout"`
+	UnitRoster      []UnitType       `json:"unitRoster"`
+	IncomePercent   int              `json:"incomePercent"`
 }
 
 type DiplomacyOffer struct {

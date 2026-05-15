@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { ClientAction, StackPick, StateMsg, Tile } from '../types';
+import type { ClientAction, StackPick, StateMsg, Tile, UnitClass } from '../types';
 import { Board } from './Board';
 import {
   ActionPanel,
@@ -12,6 +12,7 @@ import { ResourcePanel } from './ResourcePanel';
 import { CivilizationPicker } from './CivilizationPicker';
 import { DiplomacyBanner } from './DiplomacyBanner';
 import { reachableForAction } from './coords';
+import { UNIT_CLASS } from './units';
 
 interface GameViewProps {
   state: StateMsg | null;
@@ -337,12 +338,16 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
           <ResourcePanel
             resources={state.you?.resources ?? {}}
             armyBreakdown={(() => {
-              const breakdown = { infantry: 0, armor: 0, jet: 0 };
+              const breakdown: Record<UnitClass, number> = {
+                infantry: 0, armor: 0, artillery: 0, air: 0, special: 0,
+              };
               if (myPlayerId !== null) {
                 for (const tile of state.board?.tiles ?? []) {
                   if (tile.ownerId !== myPlayerId) continue;
                   for (const stack of tile.garrison) {
-                    breakdown[stack.type] += stack.count;
+                    const cls = UNIT_CLASS[stack.type];
+                    if (cls === undefined) continue;
+                    breakdown[cls] += stack.count;
                   }
                 }
               }

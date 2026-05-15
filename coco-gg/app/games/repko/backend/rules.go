@@ -211,9 +211,8 @@ func buildStartingGarrison(state *GameState, civID string) []GarrisonStack {
 			break
 		}
 	}
-	order := []UnitType{UnitInfantry, UnitArmor, UnitJet}
-	garrison := make([]GarrisonStack, 0, len(order))
-	for _, ut := range order {
+	garrison := make([]GarrisonStack, 0, len(loadout))
+	for _, ut := range UnitOrder {
 		count := loadout[ut]
 		if count <= 0 {
 			continue
@@ -244,6 +243,10 @@ func validateAndApplyRecruit(state *GameState, playerID string, a ActionRecruit)
 	if player == nil {
 		return ErrNotYourTurn
 	}
+	civ := civilizationByID(state, player.CivilizationID)
+	if civ == nil || !inRoster(civ.UnitRoster, a.Unit) {
+		return ErrInvalidUnit
+	}
 	per := unitCost(a.Unit)
 	total := scaleCost(per, a.Count)
 	if !player.Resources.canAfford(total) {
@@ -251,7 +254,6 @@ func validateAndApplyRecruit(state *GameState, playerID string, a ActionRecruit)
 	}
 	player.Resources.deduct(total)
 	addToStack(&tile.Garrison, a.Unit, 1, a.Count)
-	advancePlayingTurn(state)
 	return nil
 }
 
@@ -452,7 +454,6 @@ func validateAndApplyBuyTile(state *GameState, playerID string, a ActionBuyTile)
 	}
 	player.Resources.deduct(cost)
 	tile.OwnerID = playerID
-	tile.Garrison = []GarrisonStack{}
 	log.Printf("game: repko buy_tile (player=%s tile=(%d,%d) cost=%dc)",
 		playerID, a.Q, a.R, cost[ResourceCredits])
 	advancePlayingTurn(state)
@@ -640,15 +641,11 @@ func buyTileCost(tile *Tile) int {
 }
 
 func unitCost(t UnitType) ResourceBank {
-	switch t {
-	case UnitInfantry:
-		return ResourceBank{ResourceCredits: 5, ResourceSteel: 1, ResourceFuel: 0}
-	case UnitArmor:
-		return ResourceBank{ResourceCredits: 10, ResourceSteel: 2, ResourceFuel: 0}
-	case UnitJet:
-		return ResourceBank{ResourceCredits: 20, ResourceSteel: 3, ResourceFuel: 0}
+	spec, ok := UnitCatalog[t]
+	if !ok {
+		return emptyResourceBank()
 	}
-	return emptyResourceBank()
+	return cloneResourceBank(spec.Cost)
 }
 
 func upgradeCost(s GarrisonStack) ResourceBank {
@@ -669,7 +666,8 @@ func scaleCost(cost ResourceBank, n int) ResourceBank {
 }
 
 func isValidUnitType(t UnitType) bool {
-	return t == UnitInfantry || t == UnitArmor || t == UnitJet
+	_, ok := UnitCatalog[t]
+	return ok
 }
 
 func civilizationExists(state *GameState, civID string) bool {
@@ -1042,6 +1040,14 @@ func applyTurnIncome(state *GameState, playerID string) {
 	}
 	owned := state.ownedTiles(playerID)
 	income := computeIncome(owned)
+
+	civ := civilizationByID(state, player.CivilizationID)
+	if civ != nil && civ.IncomePercent > 0 && civ.IncomePercent != 100 {
+		for k, v := range income {
+			income[k] = v * civ.IncomePercent / 100
+		}
+	}
+
 	player.Resources.add(income)
 
 	upkeep := sumUnits(owned)

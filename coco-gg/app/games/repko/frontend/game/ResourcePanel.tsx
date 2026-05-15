@@ -1,26 +1,15 @@
-import type { ResourceType, UnitType } from '../types';
-
-interface ArmyBreakdown {
-  infantry: number;
-  armor: number;
-  jet: number;
-}
+import type { ResourceType, UnitClass } from '../types';
+import { CLASS_ICON, CLASS_ORDER } from './units';
 
 interface ResourcePanelProps {
   resources: Partial<Record<ResourceType, number>>;
-  armyBreakdown: ArmyBreakdown;
+  armyBreakdown: Record<UnitClass, number>;
 }
 
 const RESOURCE_CHIPS: ReadonlyArray<{ type: Exclude<ResourceType, 'none'>; icon: string }> = [
   { type: 'credits', icon: '💵' },
   { type: 'steel', icon: '⚒' },
   { type: 'fuel', icon: '⛽' },
-];
-
-const ARMY_CHIPS: ReadonlyArray<{ type: UnitType; icon: string }> = [
-  { type: 'infantry', icon: '🪖' },
-  { type: 'armor', icon: '🚛' },
-  { type: 'jet', icon: '✈️' },
 ];
 
 function Chip({ icon, count }: { icon: string; count: number }) {
@@ -39,8 +28,8 @@ export function ResourcePanel({ resources, armyBreakdown }: ResourcePanelProps) 
         <Chip key={r.type} icon={r.icon} count={resources[r.type] ?? 0} />
       ))}
       <span className="text-slate-300 text-xs mx-0.5">│</span>
-      {ARMY_CHIPS.map((a) => (
-        <Chip key={a.type} icon={a.icon} count={armyBreakdown[a.type]} />
+      {CLASS_ORDER.map((cls) => (
+        <Chip key={cls} icon={CLASS_ICON[cls]} count={armyBreakdown[cls]} />
       ))}
     </div>
   );

@@ -2,7 +2,14 @@ export type Phase = 'lobby' | 'civ_pick' | 'tile_pick' | 'playing' | 'game_over'
 
 export type ResourceType = 'credits' | 'steel' | 'fuel' | 'none';
 
-export type UnitType = 'infantry' | 'armor' | 'jet';
+export type UnitType =
+  | 'riflemen' | 'marines' | 'snipers' | 'engineers' | 'paratroopers' | 'commandos'
+  | 'apc' | 'light_tank' | 'medium_tank' | 'anti_tank' | 'heavy_tank'
+  | 'mortar' | 'howitzer' | 'rocket_artillery'
+  | 'drone_swarm' | 'helicopter' | 'fighter_jet' | 'bomber' | 'stealth_bomber'
+  | 'naval_strike' | 'missile_launcher' | 'cyber_unit';
+
+export type UnitClass = 'infantry' | 'armor' | 'artillery' | 'air' | 'special';
 
 export type UnitLevel = 1 | 2 | 3;
 
@@ -39,7 +46,9 @@ export interface Civilization {
   backgroundColor: string;
   flag: string;
   coatOfArms: string;
-  startingLoadout?: Record<UnitType, number>;
+  startingLoadout?: Partial<Record<UnitType, number>>;
+  unitRoster?: UnitType[];
+  incomePercent?: number;
 }
 
 export interface DiplomacyOffer {

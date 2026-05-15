@@ -1,8 +1,9 @@
 /// <reference types="vite/client" />
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react';
-import type { GarrisonStack, ResourceType, StateMsg, Tile, UnitType } from '../types';
+import type { GarrisonStack, ResourceType, StateMsg, Tile } from '../types';
 import { boardBounds, hexCorner, hexToPixel } from './coords';
+import { BASE_POWER, UNIT_ICON } from './units';
 
 interface BoardProps {
   state: StateMsg;
@@ -175,18 +176,6 @@ const PRODUCTION_ICON: Record<ResourceType, string> = {
   steel: '⚒',
   fuel: '⛽',
   none: '',
-};
-
-const BASE_POWER: Record<UnitType, number> = {
-  infantry: 3,
-  armor: 4,
-  jet: 5,
-};
-
-const UNIT_ICON: Record<UnitType, string> = {
-  infantry: '🪖',
-  armor: '🚛',
-  jet: '✈️',
 };
 
 const NEUTRAL_STROKE = '#94a3b8';

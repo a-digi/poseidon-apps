@@ -28,15 +28,11 @@ func stackPower(s GarrisonStack) int {
 }
 
 func basePower(t UnitType) int {
-	switch t {
-	case UnitInfantry:
-		return 3
-	case UnitArmor:
-		return 4
-	case UnitJet:
-		return 5
+	spec, ok := UnitCatalog[t]
+	if !ok {
+		return 0
 	}
-	return 0
+	return spec.Power
 }
 
 // removePower destroys whole soldiers from `stacks` in lowest-power-first order

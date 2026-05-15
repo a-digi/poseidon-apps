@@ -10,6 +10,7 @@ import type {
   UnitType,
 } from '../types';
 import { hexDistance } from './coords';
+import { BASE_POWER, UNIT_ICON, UNIT_NAME, UNIT_COSTS, UNIT_ORDER } from './units';
 
 export type SubAction =
   | 'inspect'
@@ -20,26 +21,6 @@ export type SubAction =
   | 'diplomacy'
   | 'buy'
   | 'upgrade_tile';
-
-const BASE_POWER: Record<UnitType, number> = { infantry: 3, armor: 4, jet: 5 };
-
-const UNIT_COSTS: Record<UnitType, { credits: number; steel: number; fuel: number }> = {
-  infantry: { credits: 5, steel: 1, fuel: 0 },
-  armor: { credits: 10, steel: 2, fuel: 0 },
-  jet: { credits: 20, steel: 3, fuel: 0 },
-};
-
-const UNIT_ICON: Record<UnitType, string> = {
-  infantry: '🪖',
-  armor: '🚛',
-  jet: '✈️',
-};
-
-const UNIT_NAME: Record<UnitType, string> = {
-  infantry: 'Infantry',
-  armor: 'Tank',
-  jet: 'Jet',
-};
 
 const PROD_ICON: Record<string, string> = {
   credits: '💵',
@@ -482,25 +463,22 @@ interface RecruitSubPanelProps {
   tile: Tile;
   credits: number;
   steel: number;
+  roster: UnitType[];
   onConfirm: (unit: UnitType, count: number) => void;
   onCancel: () => void;
 }
 
-function RecruitSubPanel({ tile, credits, steel, onConfirm, onCancel }: RecruitSubPanelProps) {
-  const [counts, setCounts] = useState<Record<UnitType, number>>({
-    infantry: 0,
-    armor: 0,
-    jet: 0,
-  });
+function RecruitSubPanel({ tile, credits, steel, roster, onConfirm, onCancel }: RecruitSubPanelProps) {
+  const [counts, setCounts] = useState<Record<UnitType, number>>(() =>
+    Object.fromEntries(roster.map((u) => [u, 0])) as Record<UnitType, number>,
+  );
   const setCount = (u: UnitType, next: number) =>
     setCounts((prev) => ({ ...prev, [u]: next }));
-
-  const units: UnitType[] = ['infantry', 'armor', 'jet'];
 
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[10px] text-slate-500">Recruit on tile ({tile.q},{tile.r})</p>
-      {units.map((u) => {
+      {roster.map((u) => {
         const cost = recruitCreditSteelCost(u, counts[u]);
         const unitCost = recruitCreditSteelCost(u, 1);
         const canConfirm = counts[u] > 0 && cost.credits <= credits && cost.steel <= steel;
@@ -985,6 +963,10 @@ export function ActionPanel({
   const credits = state.you?.resources?.credits ?? 0;
   const steel = state.you?.resources?.steel ?? 0;
 
+  const myCivId = state.players.find((p) => p.id === myPlayerId)?.civilizationId;
+  const myCiv = state.civilizations?.find((c) => c.id === myCivId);
+  const myRoster = myCiv?.unitRoster ?? UNIT_ORDER;
+
   const resetToInspect = () => onSubActionChange('inspect');
 
   const sources = sortSourcesByPreference(reachableSources(state, myPlayerId, selectedTile));
@@ -1110,6 +1092,7 @@ export function ActionPanel({
             tile={selectedTile}
             credits={credits}
             steel={steel}
+            roster={myRoster}
             onConfirm={handleRecruit}
             onCancel={resetToInspect}
           />

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { ClientAction, Civilization, PlayerState, StateMsg } from '../types';
+import type { ClientAction, Civilization, PlayerState, StateMsg, UnitType } from '../types';
+import { UNIT_ICON } from './units';
 
 interface CivilizationPickerProps {
   state: StateMsg;
@@ -55,7 +56,13 @@ function CivTile({ civ, status, onPick }: CivTileProps) {
       </span>
       {loadout !== undefined && (
         <span className="text-[10px] text-slate-500">
-          🪖 {loadout.infantry ?? 0}  🚛 {loadout.armor ?? 0}  ✈️ {loadout.jet ?? 0}
+          {Object.entries(loadout).flatMap(([type, count]) =>
+            count > 0 ? [
+              <span key={type} className="mr-2">
+                {UNIT_ICON[type as UnitType]} {count}
+              </span>,
+            ] : []
+          )}
         </span>
       )}
     </button>

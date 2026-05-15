@@ -168,7 +168,7 @@ func NewBoard(rng *rand.Rand) *Board {
 			continue
 		}
 		size := neutralBaseSize + total*neutralYieldMultiplier
-		tile.Garrison = []GarrisonStack{{Type: UnitInfantry, Level: 1, Count: size}}
+		tile.Garrison = []GarrisonStack{{Type: UnitRiflemen, Level: 1, Count: size}}
 	}
 
 	hexSet := make(map[Hex]struct{}, len(coords))
