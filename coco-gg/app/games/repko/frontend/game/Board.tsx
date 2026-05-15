@@ -1,5 +1,6 @@
+/// <reference types="vite/client" />
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react';
 import type { GarrisonStack, ResourceType, StateMsg, Tile, UnitType } from '../types';
 import { boardBounds, hexCorner, hexToPixel } from './coords';
 
@@ -28,6 +29,145 @@ const PRODUCTION_GRADIENT: Record<ResourceType, string> = {
   food: 'url(#grad-food)',
   none: 'url(#grad-none)',
 };
+void PRODUCTION_GRADIENT;
+
+const MOSAIC_BASE: Record<ResourceType, string> = {
+  gold: '#d4a017',
+  iron: '#64748b',
+  food: '#65a30d',
+  none: '#c2b280',
+};
+
+const MOSAIC_SHAPES: Record<ResourceType, ReactNode> = {
+  gold: (
+    <>
+      <rect x="0.05" y="0.15" width="0.18" height="0.04" fill="#f5c842" />
+      <rect x="0.55" y="0.25" width="0.22" height="0.04" fill="#f5c842" />
+      <rect x="0.15" y="0.45" width="0.25" height="0.04" fill="#f5c842" />
+      <rect x="0.6" y="0.6" width="0.2" height="0.04" fill="#f5c842" />
+      <rect x="0.25" y="0.8" width="0.18" height="0.04" fill="#f5c842" />
+      <rect x="0.08" y="0.72" width="0.14" height="0.04" fill="#92400e" />
+      <rect x="0.7" y="0.42" width="0.12" height="0.04" fill="#92400e" />
+      <rect x="0.42" y="0.18" width="0.1" height="0.03" fill="#92400e" />
+      <circle cx="0.3" cy="0.35" r="0.06" fill="#fef3c7" />
+      <circle cx="0.3" cy="0.35" r="0.045" fill="#fbbf24" />
+      <circle cx="0.3" cy="0.35" r="0.02" fill="#92400e" />
+      <circle cx="0.65" cy="0.7" r="0.05" fill="#fef3c7" />
+      <circle cx="0.65" cy="0.7" r="0.038" fill="#fbbf24" />
+      <circle cx="0.65" cy="0.7" r="0.018" fill="#92400e" />
+    </>
+  ),
+  iron: (
+    <>
+      <rect x="0.05" y="0.2" width="0.35" height="0.025" fill="#cbd5e1" />
+      <rect x="0.4" y="0.65" width="0.35" height="0.025" fill="#cbd5e1" />
+      <rect x="0.15" y="0.48" width="0.28" height="0.02" fill="#cbd5e1" />
+      <rect x="0.55" y="0.1" width="0.25" height="0.02" fill="#cbd5e1" />
+      <rect x="0.18" y="0.12" width="0.06" height="0.06" fill="#1e293b" />
+      <rect x="0.24" y="0.16" width="0.04" height="0.04" fill="#1e293b" />
+      <rect x="0.62" y="0.32" width="0.07" height="0.06" fill="#1e293b" />
+      <rect x="0.7" y="0.36" width="0.04" height="0.04" fill="#1e293b" />
+      <rect x="0.45" y="0.78" width="0.06" height="0.06" fill="#1e293b" />
+      <rect x="0.78" y="0.78" width="0.05" height="0.05" fill="#1e293b" />
+      <rect x="0.12" y="0.72" width="0.05" height="0.05" fill="#1e293b" />
+      <rect x="0.35" y="0.4" width="0.04" height="0.04" fill="#94a3b8" />
+      <rect x="0.55" y="0.55" width="0.04" height="0.04" fill="#94a3b8" />
+      <rect x="0.82" y="0.18" width="0.04" height="0.04" fill="#94a3b8" />
+    </>
+  ),
+  food: (
+    <>
+      <rect x="0.05" y="0.6" width="0.18" height="0.08" fill="#3f6212" />
+      <rect x="0.55" y="0.18" width="0.22" height="0.06" fill="#3f6212" />
+      <rect x="0.25" y="0.8" width="0.18" height="0.06" fill="#3f6212" />
+      <rect x="0.7" y="0.5" width="0.18" height="0.06" fill="#3f6212" />
+      <rect x="0.1" y="0.32" width="0.25" height="0.03" fill="#a3e635" />
+      <rect x="0.5" y="0.5" width="0.3" height="0.03" fill="#a3e635" />
+      <rect x="0.15" y="0.7" width="0.15" height="0.025" fill="#a3e635" />
+      {[0, 1, 2, 3].map((row) =>
+        [0, 1, 2, 3, 4].map((col) => (
+          <rect
+            key={`wheat-${row}-${col}`}
+            x={0.1 + col * 0.18 + (row % 2 ? 0.04 : 0)}
+            y={0.15 + row * 0.18}
+            width="0.025"
+            height="0.06"
+            fill="#fde047"
+          />
+        )),
+      )}
+    </>
+  ),
+  none: (
+    <>
+      <rect x="0.05" y="0.2" width="0.3" height="0.08" fill="#e5d5b0" />
+      <rect x="0.55" y="0.55" width="0.28" height="0.08" fill="#e5d5b0" />
+      <rect x="0.25" y="0.7" width="0.2" height="0.06" fill="#e5d5b0" />
+      <rect x="0.4" y="0.1" width="0.04" height="0.12" fill="#44403c" />
+      <rect x="0.44" y="0.22" width="0.04" height="0.1" fill="#44403c" />
+      <rect x="0.4" y="0.32" width="0.04" height="0.12" fill="#44403c" />
+      <rect x="0.44" y="0.44" width="0.04" height="0.1" fill="#44403c" />
+      <rect x="0.4" y="0.54" width="0.04" height="0.12" fill="#44403c" />
+      <rect x="0.44" y="0.66" width="0.04" height="0.1" fill="#44403c" />
+      <rect x="0.15" y="0.45" width="0.05" height="0.04" fill="#78350f" />
+      <rect x="0.72" y="0.28" width="0.06" height="0.05" fill="#78350f" />
+      <rect x="0.78" y="0.75" width="0.05" height="0.04" fill="#78350f" />
+      <rect x="0.1" y="0.85" width="0.05" height="0.04" fill="#78350f" />
+    </>
+  ),
+};
+
+const spriteUrls = import.meta.glob<{ default: string }>(
+  '../assets/tiles/*.png',
+  { eager: true, query: '?url' },
+);
+
+const SPRITE_URL: Record<ResourceType, string | null> = {
+  gold: spriteUrls['../assets/tiles/gold.png']?.default ?? null,
+  iron: spriteUrls['../assets/tiles/iron.png']?.default ?? null,
+  food: spriteUrls['../assets/tiles/food.png']?.default ?? null,
+  none: spriteUrls['../assets/tiles/none.png']?.default ?? null,
+};
+
+function tileFill(production: ResourceType): string {
+  const url = SPRITE_URL[production];
+  if (url !== null) return `url(#sprite-${production})`;
+  return `url(#mosaic-${production})`;
+}
+
+interface SpritePatternProps {
+  production: ResourceType;
+  url: string;
+}
+
+function SpritePattern({ production, url }: SpritePatternProps) {
+  return (
+    <pattern id={`sprite-${production}`} patternUnits="objectBoundingBox" width="1" height="1">
+      <image
+        href={url}
+        x="0"
+        y="0"
+        width="1"
+        height="1"
+        preserveAspectRatio="xMidYMid slice"
+        style={{ imageRendering: 'pixelated' }}
+      />
+    </pattern>
+  );
+}
+
+interface MosaicTileProps {
+  kind: ResourceType;
+}
+
+function MosaicTile({ kind }: MosaicTileProps) {
+  return (
+    <pattern id={`mosaic-${kind}`} patternUnits="objectBoundingBox" width="1" height="1">
+      <rect width="1" height="1" fill={MOSAIC_BASE[kind]} />
+      {MOSAIC_SHAPES[kind]}
+    </pattern>
+  );
+}
 
 const PRODUCTION_ICON: Record<ResourceType, string> = {
   gold: '💰',
@@ -181,7 +321,7 @@ export function Board({
         cx: x,
         cy: y,
         path: buildHexPath(x, y, HEX_SIZE),
-        fill: PRODUCTION_GRADIENT[tile.production],
+        fill: tileFill(tile.production),
         strokeColor,
         strokeWidth,
         strokeDasharray,
@@ -390,9 +530,18 @@ export function Board({
             <stop offset="45%" stopColor="#ffffff" stopOpacity="0.06" />
             <stop offset="100%" stopColor="#000000" stopOpacity="0.18" />
           </linearGradient>
+          <MosaicTile kind="gold" />
+          <MosaicTile kind="iron" />
+          <MosaicTile kind="food" />
+          <MosaicTile kind="none" />
+          {SPRITE_URL.gold !== null && <SpritePattern production="gold" url={SPRITE_URL.gold} />}
+          {SPRITE_URL.iron !== null && <SpritePattern production="iron" url={SPRITE_URL.iron} />}
+          {SPRITE_URL.food !== null && <SpritePattern production="food" url={SPRITE_URL.food} />}
+          {SPRITE_URL.none !== null && <SpritePattern production="none" url={SPRITE_URL.none} />}
         </defs>
         {rendered.map((r) => {
-          const yieldLabel = r.tile.production === 'none' ? '' : String(r.tile.yield);
+          const primaryYield = r.tile.yields?.[r.tile.production] ?? 0;
+          const yieldLabel = r.tile.production === 'none' || primaryYield === 0 ? '' : String(primaryYield);
           const k = tileKey(r.tile.q, r.tile.r);
           const showAttackRing =
             attackMode === true && r.isReachable && !r.isOwnedByMe;

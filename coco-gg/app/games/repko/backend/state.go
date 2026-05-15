@@ -53,14 +53,14 @@ type DiplomacyOffer struct {
 }
 
 type Tile struct {
-	Q          int             `json:"q"`
-	R          int             `json:"r"`
-	Production ResourceType    `json:"production"`
-	Yield      int             `json:"yield"`
-	OwnerID    string          `json:"ownerId"`
-	FoundedBy  string          `json:"foundedBy,omitempty"`
-	Name       string          `json:"name,omitempty"`
-	Garrison   []GarrisonStack `json:"garrison"`
+	Q          int                  `json:"q"`
+	R          int                  `json:"r"`
+	Production ResourceType         `json:"production"`
+	Yields     map[ResourceType]int `json:"yields"`
+	OwnerID    string               `json:"ownerId"`
+	FoundedBy  string               `json:"foundedBy,omitempty"`
+	Name       string               `json:"name,omitempty"`
+	Garrison   []GarrisonStack      `json:"garrison"`
 }
 
 type PlayerState struct {

@@ -21,7 +21,7 @@ export interface Tile {
   q: number;
   r: number;
   production: ResourceType;
-  yield: number;
+  yields: Partial<Record<ResourceType, number>>;
   ownerId: string;
   foundedBy?: string;
   name?: string;
@@ -145,12 +145,6 @@ export interface Attack {
   units: StackPick[];
 }
 
-export interface BuyTile {
-  type: 'buy_tile';
-  q: number;
-  r: number;
-}
-
 export interface OfferDiplomacy {
   type: 'offer_diplomacy';
   q: number;
@@ -190,7 +184,6 @@ export type ClientAction =
   | Upgrade
   | Move
   | Attack
-  | BuyTile
   | OfferDiplomacy
   | AcceptDiplomacy
   | DeclineDiplomacy

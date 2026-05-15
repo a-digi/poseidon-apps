@@ -3,10 +3,9 @@ package repko
 func computeIncome(tiles []*Tile) ResourceBank {
 	out := emptyResourceBank()
 	for _, t := range tiles {
-		if t.Production == ResourceNone {
-			continue
+		for resType, amount := range t.Yields {
+			out[resType] += amount
 		}
-		out[t.Production] += t.Yield
 	}
 	return out
 }

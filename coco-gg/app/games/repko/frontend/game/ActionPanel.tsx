@@ -3,6 +3,7 @@ import type {
   ClientAction,
   Civilization,
   GarrisonStack,
+  ResourceType,
   StackPick,
   StateMsg,
   Tile,
@@ -16,8 +17,7 @@ export type SubAction =
   | 'upgrade'
   | 'move'
   | 'attack'
-  | 'diplomacy'
-  | 'buy';
+  | 'diplomacy';
 
 const BASE_POWER: Record<UnitType, number> = { infantry: 1, cavalry: 2, artillery: 3 };
 
@@ -51,6 +51,25 @@ const PROD_NAME: Record<string, string> = {
   food: 'Food',
 };
 
+const RESOURCE_ICON: Record<ResourceType, string> = {
+  gold: '💰',
+  iron: '⚒',
+  food: '🍞',
+  none: '',
+};
+
+function productiveYields(
+  yields: Partial<Record<ResourceType, number>> | undefined,
+): { type: ResourceType; amount: number }[] {
+  if (yields === undefined) return [];
+  const out: { type: ResourceType; amount: number }[] = [];
+  for (const t of ['gold', 'iron', 'food'] as const) {
+    const a = yields[t] ?? 0;
+    if (a > 0) out.push({ type: t, amount: a });
+  }
+  return out;
+}
+
 function stackPower(stack: GarrisonStack): number {
   return stack.count * BASE_POWER[stack.type] * stack.level;
 }
@@ -75,10 +94,6 @@ function diplomacyGoldCost(defenderGarrison: GarrisonStack[]): number {
   return totalPower(defenderGarrison) * 2;
 }
 
-function buyGoldCost(tile: Tile): number {
-  return tile.yield * 20;
-}
-
 interface ButtonState {
   label: string;
   disabled: boolean;
@@ -92,7 +107,7 @@ function describeAttack(
   if (sources.length === 0) {
     return {
       state: {
-        label: 'Attack — out of range (need a friendly tile within 2 hexes)',
+        label: 'Attack — out of range (need an adjacent friendly tile)',
         disabled: true,
       },
       source: null,
@@ -138,7 +153,7 @@ function describeDiplomacy(
   }
   if (sources.length === 0) {
     return {
-      label: 'Offer Diplomacy — out of range (need a friendly tile within 2 hexes)',
+      label: 'Offer Diplomacy — out of range (need an adjacent friendly tile)',
       disabled: true,
     };
   }
@@ -150,23 +165,6 @@ function describeDiplomacy(
     };
   }
   return { label: `Offer Diplomacy — costs ${cost}g`, disabled: false };
-}
-
-function describeBuy(tile: Tile, sources: Tile[], gold: number): ButtonState {
-  const cost = buyGoldCost(tile);
-  if (sources.length === 0) {
-    return {
-      label: `Buy this tile — out of range (need a friendly tile within 2 hexes)`,
-      disabled: true,
-    };
-  }
-  if (gold < cost) {
-    return {
-      label: `Buy this tile — costs ${cost}g (need ${cost - gold} more)`,
-      disabled: true,
-    };
-  }
-  return { label: `Buy this tile — costs ${cost}g`, disabled: false };
 }
 
 function recruitGoldIronCost(unit: UnitType, count: number): { gold: number; iron: number } {
@@ -253,7 +251,6 @@ function rangeBadge(distance: number | null): { label: string; cls: string } {
   if (distance === null) return { label: 'No territory yet', cls: 'bg-slate-200 text-slate-700' };
   if (distance === 0) return { label: 'On your territory', cls: 'bg-emerald-100 text-emerald-800' };
   if (distance === 1) return { label: 'Adjacent', cls: 'bg-amber-100 text-amber-800' };
-  if (distance === 2) return { label: 'Within range', cls: 'bg-amber-100 text-amber-800' };
   return { label: 'Out of range', cls: 'bg-slate-200 text-slate-600' };
 }
 
@@ -279,7 +276,7 @@ function TileInfoCard({ state, myPlayerId, tile }: InfoCardProps) {
   const productionLine =
     prod === 'none'
       ? 'Barren (no production)'
-      : `${PROD_ICON[prod] ?? ''} ${PROD_NAME[prod] ?? prod} — yield ${tile.yield}/turn`;
+      : `${PROD_ICON[prod] ?? ''} ${PROD_NAME[prod] ?? prod}`;
 
   const garrisonLine =
     tile.garrison.length === 0
@@ -292,16 +289,7 @@ function TileInfoCard({ state, myPlayerId, tile }: InfoCardProps) {
       ? `Total: ${totalUnits(tile.garrison)} units (${totalPower(tile.garrison)} power)`
       : '';
 
-  let incomeLine: string;
-  if (prod === 'none') {
-    incomeLine = 'Income: barren (no production)';
-  } else if (isMine) {
-    incomeLine = `Income: +${tile.yield} ${prod}/turn (yours)`;
-  } else if (isNeutral) {
-    incomeLine = 'Income: none (neutral)';
-  } else {
-    incomeLine = `Income: +${tile.yield} ${prod}/turn (to ${ownerCiv?.name ?? 'enemy'})`;
-  }
+  const yieldEntries = productiveYields(tile.yields);
 
   return (
     <div className="border-b border-slate-200 px-3 py-2 text-xs text-slate-700">
@@ -326,7 +314,18 @@ function TileInfoCard({ state, myPlayerId, tile }: InfoCardProps) {
         <span className="font-medium text-slate-800">Garrison:</span> {garrisonLine}
       </p>
       {garrisonTotals !== '' && <p className="text-[11px] text-slate-500">{garrisonTotals}</p>}
-      <p className="mt-1 text-[11px] text-slate-500">{incomeLine}</p>
+      <div className="mt-1 flex items-center gap-2 text-xs text-slate-600">
+        <span className="text-[10px] uppercase text-slate-400">Income</span>
+        {yieldEntries.length === 0 ? (
+          <span className="italic text-slate-400">Barren</span>
+        ) : (
+          yieldEntries.map(({ type, amount }) => (
+            <span key={type} className="font-mono">
+              {RESOURCE_ICON[type]} {amount}
+            </span>
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -713,29 +712,6 @@ function DiplomacySubPanel({ target, gold, pending, onConfirm, onCancel }: Diplo
   );
 }
 
-interface BuySubPanelProps {
-  target: Tile;
-  gold: number;
-  onConfirm: () => void;
-  onCancel: () => void;
-}
-
-function BuySubPanel({ target, gold, onConfirm, onCancel }: BuySubPanelProps) {
-  const cost = buyGoldCost(target);
-  const canConfirm = cost <= gold;
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-[10px] text-slate-700">
-        Cost: yield {target.yield} × 20 = {cost} gold
-      </p>
-      <div className="flex items-center gap-2">
-        <ActionButton label="Confirm buy" disabled={!canConfirm} onClick={onConfirm} />
-        <CancelButton onClick={onCancel} />
-      </div>
-    </div>
-  );
-}
-
 interface ContextualActionsProps {
   state: StateMsg;
   myPlayerId: string;
@@ -803,13 +779,18 @@ function ContextualActions({
   }
 
   if (isNeutral) {
-    const buyBtn = describeBuy(tile, sources, gold);
+    const { state: attackBtn, source } = describeAttack(tile, sources, gold);
     return (
       <div className="flex flex-col gap-2">
         <ActionButton
-          label={buyBtn.label}
-          disabled={buyBtn.disabled}
-          onClick={() => onSubActionChange('buy')}
+          label={attackBtn.label}
+          disabled={attackBtn.disabled}
+          onClick={() => {
+            if (source !== null) {
+              onAttackSourceChange({ q: source.q, r: source.r });
+            }
+            onSubActionChange('attack');
+          }}
         />
       </div>
     );
@@ -900,11 +881,6 @@ export function ActionPanel({
     resetToInspect();
   };
 
-  const handleBuyConfirm = () => {
-    onAction({ type: 'buy_tile', q: selectedTile.q, r: selectedTile.r });
-    resetToInspect();
-  };
-
   return (
     <footer className="border-t border-slate-200 bg-slate-50">
       <TileInfoCard state={state} myPlayerId={myPlayerId} tile={selectedTile} />
@@ -970,14 +946,6 @@ export function ActionPanel({
             gold={gold}
             pending={pendingOnThisTile}
             onConfirm={handleDiplomacyConfirm}
-            onCancel={resetToInspect}
-          />
-        )}
-        {subAction === 'buy' && (
-          <BuySubPanel
-            target={selectedTile}
-            gold={gold}
-            onConfirm={handleBuyConfirm}
             onCancel={resetToInspect}
           />
         )}

@@ -16,8 +16,7 @@ var (
 	ErrTileNotOwned     = errors.New("tile is not yours")
 	ErrTileNotNeutral   = errors.New("tile is not neutral")
 	ErrTileNotEnemy     = errors.New("tile is not held by an enemy")
-	ErrOutOfRange       = errors.New("destination out of range")
-	ErrNoFriendlyPath   = errors.New("no friendly path to destination")
+	ErrOutOfRange            = errors.New("destination out of range")
 	ErrInsufficientResources = errors.New("insufficient resources")
 	ErrMaxLevel         = errors.New("unit already at max level")
 	ErrCivAlreadyTaken  = errors.New("civilization already taken")
@@ -62,7 +61,6 @@ type ActionAttack struct {
 	ToQ, ToR     int
 	Units        []StackPick
 }
-type ActionBuyTile struct{ Q, R int }
 type ActionOfferDiplomacy struct{ Q, R int }
 type ActionAcceptDiplomacy struct{ Q, R int }
 type ActionDeclineDiplomacy struct{ Q, R int }
@@ -117,10 +115,6 @@ func ValidateAndApply(state *GameState, playerID string, action any) error {
 			}
 		case ActionAttack:
 			if err := validateAndApplyAttack(state, playerID, a); err != nil {
-				return err
-			}
-		case ActionBuyTile:
-			if err := validateAndApplyBuyTile(state, playerID, a); err != nil {
 				return err
 			}
 		case ActionOfferDiplomacy:
@@ -317,11 +311,8 @@ func validateAndApplyMove(state *GameState, playerID string, a ActionMove) error
 	if toTile.OwnerID != playerID {
 		return ErrTileNotOwned
 	}
-	if cubeDistance(from, to) > 2 {
+	if cubeDistance(from, to) != 1 {
 		return ErrOutOfRange
-	}
-	if !hasFriendlyPath(state, playerID, from, to) {
-		return ErrNoFriendlyPath
 	}
 	picks, err := validateStackPicks(a.Units, fromTile.Garrison)
 	if err != nil {
@@ -361,11 +352,8 @@ func validateAndApplyAttack(state *GameState, playerID string, a ActionAttack) e
 	if toTile.OwnerID == playerID {
 		return ErrTileNotEnemy
 	}
-	if cubeDistance(from, to) > 2 {
+	if cubeDistance(from, to) != 1 {
 		return ErrOutOfRange
-	}
-	if !hasFriendlyPath(state, playerID, from, to) {
-		return ErrNoFriendlyPath
 	}
 	if len(fromTile.Garrison) == 0 {
 		return ErrAttackFromEmptyTile
@@ -423,52 +411,6 @@ func validateAndApplyAttack(state *GameState, playerID string, a ActionAttack) e
 	return nil
 }
 
-func validateAndApplyBuyTile(state *GameState, playerID string, a ActionBuyTile) error {
-	if state.Phase != PhasePlaying {
-		return ErrInvalidPhase
-	}
-	tile := state.tile(a.Q, a.R)
-	if tile == nil {
-		return ErrInvalidTile
-	}
-	if tile.OwnerID != "" {
-		return ErrTileNotNeutral
-	}
-	dest := Hex{Q: a.Q, R: a.R}
-	owned := state.ownedTiles(playerID)
-	withinRange := false
-	withPath := false
-	for _, src := range owned {
-		srcHex := Hex{Q: src.Q, R: src.R}
-		if cubeDistance(srcHex, dest) > 2 {
-			continue
-		}
-		withinRange = true
-		if hasFriendlyPath(state, playerID, srcHex, dest) {
-			withPath = true
-			break
-		}
-	}
-	if !withinRange {
-		return ErrOutOfRange
-	}
-	if !withPath {
-		return ErrNoFriendlyPath
-	}
-	cost := ResourceBank{ResourceGold: tile.Yield * 20}
-	player := state.playerByID(playerID)
-	if player == nil {
-		return ErrNotYourTurn
-	}
-	if !player.Resources.canAfford(cost) {
-		return ErrInsufficientResources
-	}
-	player.Resources.deduct(cost)
-	tile.OwnerID = playerID
-	advancePlayingTurn(state)
-	return nil
-}
-
 func validateAndApplyOfferDiplomacy(state *GameState, playerID string, a ActionOfferDiplomacy) error {
 	if state.Phase != PhasePlaying {
 		return ErrInvalidPhase
@@ -484,25 +426,15 @@ func validateAndApplyOfferDiplomacy(state *GameState, playerID string, a ActionO
 		return ErrDiplomacyAlreadyPending
 	}
 	dest := Hex{Q: a.Q, R: a.R}
-	owned := state.ownedTiles(playerID)
-	withinRange := false
-	withPath := false
-	for _, src := range owned {
-		srcHex := Hex{Q: src.Q, R: src.R}
-		if cubeDistance(srcHex, dest) > 2 {
-			continue
-		}
-		withinRange = true
-		if hasFriendlyPath(state, playerID, srcHex, dest) {
-			withPath = true
+	adjacent := false
+	for _, src := range state.ownedTiles(playerID) {
+		if cubeDistance(Hex{Q: src.Q, R: src.R}, dest) == 1 {
+			adjacent = true
 			break
 		}
 	}
-	if !withinRange {
+	if !adjacent {
 		return ErrOutOfRange
-	}
-	if !withPath {
-		return ErrNoFriendlyPath
 	}
 	player := state.playerByID(playerID)
 	if player == nil {
@@ -699,26 +631,6 @@ func intermediatesAtDistance2(from, to Hex) []Hex {
 		}
 	}
 	return out
-}
-
-func hasFriendlyPath(state *GameState, playerID string, from, to Hex) bool {
-	d := cubeDistance(from, to)
-	if d == 1 {
-		return true
-	}
-	if d != 2 {
-		return false
-	}
-	for _, mid := range intermediatesAtDistance2(from, to) {
-		tile := state.tile(mid.Q, mid.R)
-		if tile == nil {
-			continue
-		}
-		if tile.OwnerID == playerID {
-			return true
-		}
-	}
-	return false
 }
 
 func hasRetreatPath(state *GameState, defenderID string, from, to Hex) bool {

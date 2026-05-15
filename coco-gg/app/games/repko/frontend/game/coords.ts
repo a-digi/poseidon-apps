@@ -57,41 +57,17 @@ export function hexDistance(a: HexCoord, b: HexCoord): number {
   return (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(aS - bS)) / 2;
 }
 
-export function intermediatesAtDistance2(from: HexCoord, to: HexCoord): HexCoord[] {
-  if (hexDistance(from, to) !== 2) return [];
-  const fromNeighbors = hexNeighbors(from);
-  const out: HexCoord[] = [];
-  for (const n of fromNeighbors) {
-    if (hexDistance(n, to) === 1) out.push(n);
-  }
-  return out;
-}
-
 export function reachableForAction(
   state: StateMsg,
-  playerId: string,
+  _playerId: string,
   from: HexCoord,
 ): HexCoord[] {
   const tiles = state.board?.tiles ?? [];
-  const tileByKey = new Map<string, Tile>();
-  for (const t of tiles) tileByKey.set(`${t.q},${t.r}`, t);
-
   const out: HexCoord[] = [];
   for (const t of tiles) {
     if (t.q === from.q && t.r === from.r) continue;
-    const d = hexDistance(from, { q: t.q, r: t.r });
-    if (d === 1) {
+    if (hexDistance(from, { q: t.q, r: t.r }) === 1) {
       out.push({ q: t.q, r: t.r });
-      continue;
-    }
-    if (d !== 2) continue;
-    const mids = intermediatesAtDistance2(from, { q: t.q, r: t.r });
-    for (const m of mids) {
-      const mid = tileByKey.get(`${m.q},${m.r}`);
-      if (mid !== undefined && mid.ownerId === playerId) {
-        out.push({ q: t.q, r: t.r });
-        break;
-      }
     }
   }
   return out;

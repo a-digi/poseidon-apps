@@ -14,6 +14,11 @@ type Board struct {
 	neighbors   map[Hex][]Hex
 }
 
+const (
+	neutralBaseSize       = 5
+	neutralYieldMultiplier = 8
+)
+
 func hexCoords() []Hex {
 	rows := []struct {
 		r    int
@@ -133,19 +138,37 @@ func NewBoard(rng *rand.Rand) *Board {
 	tiles := make([]*Tile, 0, len(coords))
 	for i, h := range coords {
 		prod := productions[i]
-		yield := 0
+		yields := map[ResourceType]int{}
 		if prod != ResourceNone {
-			yield = rng.IntN(3) + 1
+			yields[prod] = 2 + rng.IntN(2)
+		}
+		for _, t := range []ResourceType{ResourceGold, ResourceIron, ResourceFood} {
+			if _, exists := yields[t]; exists {
+				continue
+			}
+			yields[t] = rng.IntN(2)
 		}
 		tiles = append(tiles, &Tile{
 			Q:          h.Q,
 			R:          h.R,
 			Production: prod,
-			Yield:      yield,
+			Yields:     yields,
 			OwnerID:    "",
 			Name:       pickName(prod),
 			Garrison:   make([]GarrisonStack, 0),
 		})
+	}
+
+	for _, tile := range tiles {
+		total := 0
+		for _, y := range tile.Yields {
+			total += y
+		}
+		if total == 0 {
+			continue
+		}
+		size := neutralBaseSize + total*neutralYieldMultiplier
+		tile.Garrison = []GarrisonStack{{Type: UnitInfantry, Level: 1, Count: size}}
 	}
 
 	hexSet := make(map[Hex]struct{}, len(coords))
