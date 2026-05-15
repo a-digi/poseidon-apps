@@ -1,51 +1,47 @@
-import type { ResourceType } from '../types';
+import type { ResourceType, UnitType } from '../types';
+
+interface ArmyBreakdown {
+  infantry: number;
+  armor: number;
+  jet: number;
+}
 
 interface ResourcePanelProps {
   resources: Partial<Record<ResourceType, number>>;
-  armyCount: number;
+  armyBreakdown: ArmyBreakdown;
 }
 
-interface VisibleResource {
-  type: Exclude<ResourceType, 'none'>;
-  label: string;
-  color: string;
-}
-
-const VISIBLE: ReadonlyArray<VisibleResource> = [
-  { type: 'credits', label: '💵 Credits', color: '#d4a017' },
-  { type: 'steel', label: '⚒ Steel', color: '#6c757d' },
-  { type: 'fuel', label: '⛽ Fuel', color: '#80b918' },
+const RESOURCE_CHIPS: ReadonlyArray<{ type: Exclude<ResourceType, 'none'>; icon: string }> = [
+  { type: 'credits', icon: '💵' },
+  { type: 'steel', icon: '⚒' },
+  { type: 'fuel', icon: '⛽' },
 ];
 
-const ARMY_COLOR = '#7c3aed';
+const ARMY_CHIPS: ReadonlyArray<{ type: UnitType; icon: string }> = [
+  { type: 'infantry', icon: '🪖' },
+  { type: 'armor', icon: '🚛' },
+  { type: 'jet', icon: '✈️' },
+];
 
-export function ResourcePanel({ resources, armyCount }: ResourcePanelProps) {
-  const armyDimmed = armyCount === 0;
-  const armyOpacityCls = armyDimmed ? 'opacity-50' : 'opacity-100';
+function Chip({ icon, count }: { icon: string; count: number }) {
   return (
-    <div className="flex items-center justify-center gap-2">
-      {VISIBLE.map((r) => {
-        const count = resources[r.type] ?? 0;
-        const dimmed = count === 0;
-        const opacityCls = dimmed ? 'opacity-50' : 'opacity-100';
-        return (
-          <div
-            key={r.type}
-            className={`flex flex-col items-center rounded-md text-white w-9 h-12 ${opacityCls}`}
-            style={{ background: r.color }}
-          >
-            <span className="text-[10px] font-medium leading-tight pt-1">{r.label}</span>
-            <span className="text-lg font-bold leading-none mt-1">{count}</span>
-          </div>
-        );
-      })}
-      <div
-        className={`flex flex-col items-center rounded-md text-white w-9 h-12 ${armyOpacityCls}`}
-        style={{ background: ARMY_COLOR }}
-      >
-        <span className="text-[10px] font-medium leading-tight pt-1">⚔</span>
-        <span className="text-lg font-bold leading-none mt-1">{armyCount}</span>
-      </div>
+    <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-xs font-bold ${count === 0 ? 'opacity-40' : ''} bg-slate-100 text-slate-800`}>
+      <span>{icon}</span>
+      <span>{count}</span>
+    </span>
+  );
+}
+
+export function ResourcePanel({ resources, armyBreakdown }: ResourcePanelProps) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {RESOURCE_CHIPS.map((r) => (
+        <Chip key={r.type} icon={r.icon} count={resources[r.type] ?? 0} />
+      ))}
+      <span className="text-slate-300 text-xs mx-0.5">│</span>
+      {ARMY_CHIPS.map((a) => (
+        <Chip key={a.type} icon={a.icon} count={armyBreakdown[a.type]} />
+      ))}
     </div>
   );
 }

@@ -334,7 +334,18 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
       <div className="border-t border-slate-200 bg-white px-3 py-2">
         <ResourcePanel
           resources={state.you?.resources ?? {}}
-          armyCount={state.players.find((p) => p.id === myPlayerId)?.unitCount ?? 0}
+          armyBreakdown={(() => {
+            const breakdown = { infantry: 0, armor: 0, jet: 0 };
+            if (myPlayerId !== null) {
+              for (const tile of state.board?.tiles ?? []) {
+                if (tile.ownerId !== myPlayerId) continue;
+                for (const stack of tile.garrison) {
+                  breakdown[stack.type] += stack.count;
+                }
+              }
+            }
+            return breakdown;
+          })()}
         />
       </div>
 

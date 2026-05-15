@@ -852,20 +852,25 @@ function ContextualActions({
 
   if (isMine) {
     const canUpgradeTile = tile.production !== 'none' && credits >= 10;
+    const hasGarrison = tile.garrison.length > 0;
     return (
-      <div className="flex flex-col gap-2">
-        <ActionButton label="Recruit" onClick={() => onSubActionChange('recruit')} />
-        {tile.garrison.length > 0 && (
-          <>
-            <ActionButton label="Upgrade" onClick={() => onSubActionChange('upgrade')} />
-            <ActionButton
-              label="Move units from here"
-              onClick={() => onSubActionChange('move')}
-            />
-          </>
-        )}
-        <ActionButton
-          label={`Upgrade Production — costs 10c${credits < 10 ? ` (need ${10 - credits} more)` : ''}`}
+      <div className="grid grid-cols-2 gap-1">
+        <IconActionButton icon="➕" label="Recruit" onClick={() => onSubActionChange('recruit')} />
+        <IconActionButton
+          icon="⬆️"
+          label="Upgrade units"
+          disabled={!hasGarrison}
+          onClick={() => onSubActionChange('upgrade')}
+        />
+        <IconActionButton
+          icon="🔀"
+          label="Move units from here"
+          disabled={!hasGarrison}
+          onClick={() => onSubActionChange('move')}
+        />
+        <IconActionButton
+          icon="⚙️"
+          label={`Upgrade production — costs 10c${credits < 10 ? ` (need ${10 - credits} more)` : ''}`}
           disabled={!canUpgradeTile}
           onClick={() => onSubActionChange('upgrade_tile')}
         />
@@ -955,6 +960,8 @@ export function ActionPanel({
   onAttackSourceChange,
   onAction,
 }: ActionPanelProps) {
+  const [minimized, setMinimized] = useState(false);
+
   const currentPlayer = useMemo(
     () => state.players.find((p) => p.id === state.currentTurn?.playerId) ?? null,
     [state.players, state.currentTurn],
@@ -973,6 +980,22 @@ export function ActionPanel({
     return (
       <footer className="border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
         Tap a tile to begin.
+      </footer>
+    );
+  }
+
+  if (minimized) {
+    return (
+      <footer className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 py-2">
+        <span className="text-xs text-slate-500">Controls hidden</span>
+        <button
+          type="button"
+          aria-label="Show controls"
+          onClick={() => setMinimized(false)}
+          className="text-xs font-medium text-slate-600 hover:text-slate-900"
+        >
+          ↑ Show
+        </button>
       </footer>
     );
   }
@@ -1024,33 +1047,83 @@ export function ActionPanel({
     resetToInspect();
   };
 
-  const isNonOwnedInspect =
-    subAction === 'inspect' &&
-    selectedTile.ownerId !== myPlayerId;
+  const isNonOwned = selectedTile.ownerId !== myPlayerId;
+  const isNonOwnedInspect = isNonOwned && subAction === 'inspect';
+  const isOwnedInspect = !isNonOwned && subAction === 'inspect';
+  const isNonOwnedSimpleConfirm = isNonOwned && (subAction === 'buy' || subAction === 'diplomacy');
+  const useInlineLayout = isNonOwnedInspect || isNonOwnedSimpleConfirm || isOwnedInspect;
+
+  const handleInlineConfirm = () => {
+    if (subAction === 'buy') {
+      onAction({ type: 'buy_tile', q: selectedTile.q, r: selectedTile.r });
+      resetToInspect();
+    } else if (subAction === 'diplomacy') {
+      handleDiplomacyConfirm();
+    }
+  };
 
   return (
     <footer className="border-t border-slate-200 bg-slate-50">
-      {isNonOwnedInspect ? (
+      <div className="flex justify-end border-b border-slate-100 px-2 py-0.5">
+        <button
+          type="button"
+          aria-label="Minimize controls"
+          onClick={() => setMinimized(true)}
+          className="text-[10px] text-slate-400 hover:text-slate-600"
+        >
+          ↓ Hide
+        </button>
+      </div>
+      {useInlineLayout ? (
         <div className="flex items-stretch border-b border-slate-200">
           <div className="min-w-0 flex-1">
             <TileInfoCard state={state} myPlayerId={myPlayerId} tile={selectedTile} noBorder />
+            {isNonOwnedSimpleConfirm && (
+              <p className="px-3 pb-2 text-xs text-slate-600">
+                {subAction === 'buy'
+                  ? `Purchase for ${buyTileCost(selectedTile)} credits?`
+                  : `Offer diplomacy? Cost: ${diplomacyGoldCost(selectedTile.garrison)} credits`}
+              </p>
+            )}
           </div>
           <div className="flex shrink-0 items-center justify-center gap-2 border-l border-slate-200 px-2 py-2">
-            <ContextualActions
-              state={state}
-              myPlayerId={myPlayerId}
-              tile={selectedTile}
-              credits={credits}
-              onSubActionChange={onSubActionChange}
-              onAttackSourceChange={onAttackSourceChange}
-            />
+            {(isNonOwnedInspect || isOwnedInspect) && (
+              <ContextualActions
+                state={state}
+                myPlayerId={myPlayerId}
+                tile={selectedTile}
+                credits={credits}
+                onSubActionChange={onSubActionChange}
+                onAttackSourceChange={onAttackSourceChange}
+              />
+            )}
+            {isNonOwnedSimpleConfirm && (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  aria-label="Confirm"
+                  onClick={handleInlineConfirm}
+                  className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-emerald-700 text-2xl text-white hover:bg-emerald-600"
+                >
+                  ✓
+                </button>
+                <button
+                  type="button"
+                  aria-label="Cancel"
+                  onClick={resetToInspect}
+                  className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-slate-200 text-xl text-slate-700 hover:bg-slate-300"
+                >
+                  ✗
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ) : (
         <TileInfoCard state={state} myPlayerId={myPlayerId} tile={selectedTile} />
       )}
       <div className="flex flex-col gap-2 px-3 py-2">
-        {subAction === 'inspect' && !isNonOwnedInspect && (
+        {subAction === 'inspect' && !useInlineLayout && (
           <ContextualActions
             state={state}
             myPlayerId={myPlayerId}
@@ -1104,7 +1177,7 @@ export function ActionPanel({
             <CancelButton onClick={resetToInspect} />
           </div>
         )}
-        {subAction === 'diplomacy' && (
+        {subAction === 'diplomacy' && !isNonOwnedSimpleConfirm && (
           <DiplomacySubPanel
             target={selectedTile}
             credits={credits}
@@ -1113,7 +1186,7 @@ export function ActionPanel({
             onCancel={resetToInspect}
           />
         )}
-        {subAction === 'buy' && (
+        {subAction === 'buy' && !isNonOwnedSimpleConfirm && (
           <div className="flex flex-col gap-2">
             <p className="text-xs text-slate-700">
               Confirm purchase of{' '}
