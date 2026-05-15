@@ -16,6 +16,7 @@ const (
 	MsgDeclineDiplomacy  MessageType = "decline_diplomacy"
 	MsgCancelDiplomacy   MessageType = "cancel_diplomacy"
 	MsgEndTurn           MessageType = "end_turn"
+	MsgLeaveGame         MessageType = "leave_game"
 
 	MsgWelcome MessageType = "welcome"
 	MsgState   MessageType = "state"
@@ -23,16 +24,18 @@ const (
 )
 
 type Hello struct {
-	Type MessageType `json:"type"`
-	Room string      `json:"room"`
-	Name string      `json:"name"`
+	Type        MessageType `json:"type"`
+	Room        string      `json:"room"`
+	Name        string      `json:"name"`
+	ResumeToken string      `json:"resumeToken,omitempty"`
 }
 
 type Welcome struct {
-	Type     MessageType `json:"type"`
-	PlayerID string      `json:"playerId"`
-	Room     string      `json:"room"`
-	You      WelcomeYou  `json:"you"`
+	Type        MessageType `json:"type"`
+	PlayerID    string      `json:"playerId"`
+	Room        string      `json:"room"`
+	ResumeToken string      `json:"resumeToken"`
+	You         WelcomeYou  `json:"you"`
 }
 
 type WelcomeYou struct {
@@ -132,5 +135,9 @@ type CancelDiplomacy struct {
 }
 
 type EndTurn struct {
+	Type MessageType `json:"type"`
+}
+
+type LeaveGame struct {
 	Type MessageType `json:"type"`
 }

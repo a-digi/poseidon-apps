@@ -40,55 +40,142 @@ func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeErrorFrame(ctx, c, "expected hello")
 		return
 	}
-	log.Printf("ws: hello (remote=%s room=%q name=%q)", r.RemoteAddr, hello.Room, hello.Name)
-	trimmed := strings.TrimSpace(hello.Name)
-	if len(trimmed) < 1 || len(trimmed) > 32 {
-		log.Printf("ws: rejected hello (remote=%s reason=invalid_name name_len=%d)", r.RemoteAddr, len(trimmed))
-		writeErrorFrame(ctx, c, "name must be 1-32 characters")
-		return
-	}
+	log.Printf("ws: hello (remote=%s room=%q name=%q resume=%t)", r.RemoteAddr, hello.Room, hello.Name, hello.ResumeToken != "")
 	if strings.TrimSpace(hello.Room) == "" {
 		log.Printf("ws: rejected hello (remote=%s reason=empty_room)", r.RemoteAddr)
 		writeErrorFrame(ctx, c, "room is required")
 		return
 	}
 
-	room, ok := h.mgr.GetRoom(hello.Room)
-	if !ok {
-		log.Printf("ws: rejected hello (remote=%s room=%q reason=unknown_room)", r.RemoteAddr, hello.Room)
-		writeErrorFrame(ctx, c, "unknown room")
-		return
-	}
+	var (
+		room   *Room
+		player *Player
+	)
 
-	player := &Player{
-		ID:     newPlayerID(),
-		Name:   trimmed,
-		SendCh: make(chan []byte, sendChCapacity),
-	}
-	if !room.Add(player) {
-		if room.PlayerCount() >= maxPlayers {
-			writeErrorFrame(ctx, c, "room is full")
-		} else {
-			writeErrorFrame(ctx, c, "room is closed")
+	if hello.ResumeToken != "" {
+		var ok bool
+		room, ok = h.mgr.GetRoom(hello.Room)
+		if !ok {
+			log.Printf("ws: resume rejected (room=%q reason=unknown_room)", hello.Room)
+			writeErrorFrame(ctx, c, "resume failed: unknown room")
+			return
 		}
-		return
-	}
-	log.Printf("game: player joined (room=%s player_id=%s name=%q color=%s)", room.Code, player.ID, player.Name, player.Color)
 
-	welcome := Welcome{
-		Type:     MsgWelcome,
-		PlayerID: player.ID,
-		Room:     room.Code,
-		You:      WelcomeYou{Name: player.Name, Color: player.Color},
-	}
-	welcomeBytes, _ := json.Marshal(welcome)
-	if err := c.Write(ctx, websocket.MessageText, welcomeBytes); err != nil {
-		room.Remove(player.ID)
-		return
-	}
-	log.Printf("ws: welcome sent (remote=%s player_id=%s room=%s)", r.RemoteAddr, player.ID, room.Code)
+		playerID, found := room.playerIDByResumeToken(hello.ResumeToken)
+		if !found {
+			log.Printf("ws: resume rejected (room=%s reason=token_unknown)", room.Code)
+			writeErrorFrame(ctx, c, "resume failed: token unknown")
+			return
+		}
 
-	room.Broadcast()
+		room.mu.Lock()
+		if room.closed {
+			room.mu.Unlock()
+			log.Printf("ws: resume rejected (room=%s reason=room_closed)", room.Code)
+			writeErrorFrame(ctx, c, "resume failed: room not started")
+			return
+		}
+		if room.state == nil {
+			room.mu.Unlock()
+			log.Printf("ws: resume rejected (room=%s reason=lobby)", room.Code)
+			writeErrorFrame(ctx, c, "resume failed: room not started")
+			return
+		}
+		if room.state.Phase == PhaseGameOver {
+			room.mu.Unlock()
+			log.Printf("ws: resume rejected (room=%s reason=game_over)", room.Code)
+			writeErrorFrame(ctx, c, "resume failed: game over")
+			return
+		}
+		ps := room.state.playerByID(playerID)
+		if ps == nil {
+			room.mu.Unlock()
+			log.Printf("ws: resume rejected (room=%s reason=player_gone)", room.Code)
+			writeErrorFrame(ctx, c, "resume failed: player gone")
+			return
+		}
+		if room.playerByIDLocked(playerID) != nil {
+			room.mu.Unlock()
+			log.Printf("ws: resume rejected (room=%s player_id=%s reason=already_connected)", room.Code, playerID)
+			writeErrorFrame(ctx, c, "resume failed: already connected")
+			return
+		}
+
+		player = &Player{
+			ID:     playerID,
+			Name:   ps.Name,
+			Color:  ps.Color,
+			SendCh: make(chan []byte, sendChCapacity),
+		}
+		room.players = append(room.players, player)
+		room.LastEmptyAt = nil
+		ps.Disconnected = false
+		room.mu.Unlock()
+
+		log.Printf("ws: resume accepted (room=%s player_id=%s)", room.Code, player.ID)
+
+		welcome := Welcome{
+			Type:        MsgWelcome,
+			PlayerID:    player.ID,
+			Room:        room.Code,
+			ResumeToken: hello.ResumeToken,
+			You:         WelcomeYou{Name: player.Name, Color: player.Color},
+		}
+		welcomeBytes, _ := json.Marshal(welcome)
+		if err := c.Write(ctx, websocket.MessageText, welcomeBytes); err != nil {
+			room.Remove(player.ID)
+			return
+		}
+		log.Printf("ws: welcome sent (remote=%s player_id=%s room=%s mode=resume)", r.RemoteAddr, player.ID, room.Code)
+		room.Broadcast()
+	} else {
+		trimmed := strings.TrimSpace(hello.Name)
+		if len(trimmed) < 1 || len(trimmed) > 32 {
+			log.Printf("ws: rejected hello (remote=%s reason=invalid_name name_len=%d)", r.RemoteAddr, len(trimmed))
+			writeErrorFrame(ctx, c, "name must be 1-32 characters")
+			return
+		}
+
+		var ok bool
+		room, ok = h.mgr.GetRoom(hello.Room)
+		if !ok {
+			log.Printf("ws: rejected hello (remote=%s room=%q reason=unknown_room)", r.RemoteAddr, hello.Room)
+			writeErrorFrame(ctx, c, "unknown room")
+			return
+		}
+
+		player = &Player{
+			ID:     newPlayerID(),
+			Name:   trimmed,
+			SendCh: make(chan []byte, sendChCapacity),
+		}
+		if !room.Add(player) {
+			if room.PlayerCount() >= maxPlayers {
+				writeErrorFrame(ctx, c, "room is full")
+			} else {
+				writeErrorFrame(ctx, c, "room is closed")
+			}
+			return
+		}
+		log.Printf("game: player joined (room=%s player_id=%s name=%q color=%s)", room.Code, player.ID, player.Name, player.Color)
+
+		token := room.generateResumeToken(player.ID)
+		welcome := Welcome{
+			Type:        MsgWelcome,
+			PlayerID:    player.ID,
+			Room:        room.Code,
+			ResumeToken: token,
+			You:         WelcomeYou{Name: player.Name, Color: player.Color},
+		}
+		welcomeBytes, _ := json.Marshal(welcome)
+		if err := c.Write(ctx, websocket.MessageText, welcomeBytes); err != nil {
+			room.Remove(player.ID)
+			return
+		}
+		log.Printf("ws: welcome sent (remote=%s player_id=%s room=%s)", r.RemoteAddr, player.ID, room.Code)
+
+		room.Broadcast()
+	}
 
 	writerDone := make(chan struct{})
 	go func() {
@@ -109,6 +196,7 @@ func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	var readErr error
+readLoop:
 	for {
 		_, raw, err := c.Read(ctx)
 		if err != nil {
@@ -204,6 +292,10 @@ func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.dispatch(room, player, ActionCancelDiplomacy{Q: m.Q, R: m.R})
 		case MsgEndTurn:
 			h.dispatch(room, player, ActionEndTurn{})
+		case MsgLeaveGame:
+			room.invalidateResumeToken(player.ID)
+			log.Printf("game: repko player left (room=%s player_id=%s)", room.Code, player.ID)
+			break readLoop
 		default:
 			sendError(player, "unknown message type")
 		}

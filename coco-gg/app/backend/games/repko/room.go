@@ -1,6 +1,8 @@
 package repko
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"sync"
@@ -30,22 +32,26 @@ func (p *Player) CloseSend() {
 }
 
 type Room struct {
-	Code        string
-	CreatedAt   time.Time
-	LastEmptyAt *time.Time
-	mu          sync.Mutex
-	closed      bool
-	players     []*Player
-	state       *GameState
+	Code                  string
+	CreatedAt             time.Time
+	LastEmptyAt           *time.Time
+	mu                    sync.Mutex
+	closed                bool
+	players               []*Player
+	state                 *GameState
+	resumeTokens          map[string]string
+	playerIDToResumeToken map[string]string
 }
 
 func NewRoom(code string) *Room {
 	now := time.Now()
 	return &Room{
-		Code:        code,
-		CreatedAt:   now,
-		LastEmptyAt: &now,
-		players:     make([]*Player, 0, maxPlayers),
+		Code:                  code,
+		CreatedAt:             now,
+		LastEmptyAt:           &now,
+		players:               make([]*Player, 0, maxPlayers),
+		resumeTokens:          make(map[string]string),
+		playerIDToResumeToken: make(map[string]string),
 	}
 }
 
@@ -197,6 +203,49 @@ func (r *Room) Kick(playerID, reason string) bool {
 	return true
 }
 
+func (r *Room) playerByIDLocked(playerID string) *Player {
+	for _, p := range r.players {
+		if p.ID == playerID {
+			return p
+		}
+	}
+	return nil
+}
+
+// generateResumeToken returns the existing resume token for playerID if one is
+// already registered, otherwise mints a new 128-bit token and registers it.
+func (r *Room) generateResumeToken(playerID string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if existing, ok := r.playerIDToResumeToken[playerID]; ok {
+		return existing
+	}
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		panic(err)
+	}
+	token := hex.EncodeToString(buf)
+	r.resumeTokens[token] = playerID
+	r.playerIDToResumeToken[playerID] = token
+	return token
+}
+
+func (r *Room) playerIDByResumeToken(token string) (string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	id, ok := r.resumeTokens[token]
+	return id, ok
+}
+
+func (r *Room) invalidateResumeToken(playerID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if t, ok := r.playerIDToResumeToken[playerID]; ok {
+		delete(r.resumeTokens, t)
+		delete(r.playerIDToResumeToken, playerID)
+	}
+}
+
 // StartGame transitions the room from lobby to civ_pick.
 func (r *Room) StartGame() error {
 	r.mu.Lock()
@@ -342,6 +391,8 @@ func (r *Room) Close() {
 		return
 	}
 	r.closed = true
+	r.resumeTokens = make(map[string]string)
+	r.playerIDToResumeToken = make(map[string]string)
 	players := make([]*Player, len(r.players))
 	copy(players, r.players)
 	r.mu.Unlock()

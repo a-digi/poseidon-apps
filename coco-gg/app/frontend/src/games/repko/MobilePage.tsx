@@ -9,10 +9,13 @@ const MAX_NAME_LENGTH = 32;
 
 type Phase = 'name' | 'joining' | 'playing';
 
+const resumeKey = (room: string) => `repko_resume_${room}`;
+
 function MobilePage() {
   const [name, setName] = useState('');
   const [room, setRoom] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [resume, setResume] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('name');
   const [connection, setConnection] = useState<Connection | null>(null);
   const [state, setState] = useState<StateMsg | null>(null);
@@ -31,9 +34,18 @@ function MobilePage() {
     } catch {
       t = null;
     }
-    console.info('[repko/MobilePage] mount', { room: r, hasToken: t !== null });
+    let storedResume: string | null = null;
+    if (r !== null) {
+      try {
+        storedResume = window.localStorage.getItem(resumeKey(r));
+      } catch {
+        storedResume = null;
+      }
+    }
+    console.info('[repko/MobilePage] mount', { room: r, hasToken: t !== null, hasResume: storedResume !== null });
     setRoom(r);
     setToken(t);
+    setResume(storedResume);
   }, []);
 
   useEffect(() => {
@@ -57,6 +69,65 @@ function MobilePage() {
       connectionRef.current?.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    if (room === null || token === null || resume === null) return;
+    if (phaseRef.current !== 'name') return;
+    console.info('[repko/MobilePage] resume attempt', { room });
+    setPhase('joining');
+    const wsUrl = buildWsUrl(window.location.host, 'repko', room, token);
+    const conn = new Connection(
+      wsUrl,
+      {
+        onWelcome: (msg) => {
+          console.info('[repko/MobilePage] welcome (resume)', { playerId: msg.playerId });
+          try { window.localStorage.setItem(resumeKey(room), msg.resumeToken); } catch { /* ignore */ }
+          clearJoinTimeout();
+          setMyPlayerId(msg.playerId);
+          setName(msg.you?.name ?? '');
+          setPhase('playing');
+        },
+        onState: (msg) => {
+          console.info('[repko/MobilePage] state', {
+            phase: msg.phase,
+            players: msg.players.length,
+            hasBoard: msg.board !== undefined,
+            hasYou: msg.you !== undefined,
+            currentTurn: msg.currentTurn ?? null,
+          });
+          setState(msg);
+        },
+        onError: (msg) => {
+          if (msg.message.startsWith('resume failed:')) {
+            console.warn('[repko/MobilePage] resume failed', msg.message);
+            try { window.localStorage.removeItem(resumeKey(room)); } catch { /* ignore */ }
+            setResume(null);
+            resetToName('Could not resume your previous session. Please rejoin.');
+            return;
+          }
+          console.warn('[repko/MobilePage] error', msg);
+          handleError(msg);
+        },
+        onClose: () => {
+          console.warn('[repko/MobilePage] close (resume, phase=' + phaseRef.current + ')');
+          handleClose();
+        },
+      },
+      { disableAutoReconnect: true },
+    );
+    conn.connect();
+    conn.sendHelloResume(room, resume);
+    joinTimeoutRef.current = window.setTimeout(() => {
+      joinTimeoutRef.current = null;
+      if (phaseRef.current === 'joining') {
+        conn.disconnect();
+        resetToName('Timed out — the server did not respond in 8 seconds.');
+      }
+    }, 8000);
+    connectionRef.current = conn;
+    setConnection(conn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room, token, resume]);
 
   const canJoin = name.trim().length > 0 && room !== null && token !== null;
 
@@ -109,6 +180,7 @@ function MobilePage() {
       {
         onWelcome: (msg) => {
           console.info('[repko/MobilePage] welcome', { playerId: msg.playerId });
+          try { window.localStorage.setItem(resumeKey(room), msg.resumeToken); } catch { /* ignore */ }
           clearJoinTimeout();
           setMyPlayerId(msg.playerId);
           setPhase('playing');
@@ -125,6 +197,12 @@ function MobilePage() {
         },
         onError: (msg) => {
           console.warn('[repko/MobilePage] error', msg);
+          if (msg.message.startsWith('resume failed:')) {
+            try { window.localStorage.removeItem(resumeKey(room)); } catch { /* ignore */ }
+            setResume(null);
+            resetToName('Could not resume your previous session. Please rejoin.');
+            return;
+          }
           handleError(msg);
         },
         onClose: () => {
@@ -153,6 +231,10 @@ function MobilePage() {
   };
 
   const handleLeave = () => {
+    if (room !== null) {
+      try { window.localStorage.removeItem(resumeKey(room)); } catch { /* ignore */ }
+    }
+    connectionRef.current?.sendLeave();
     resetToName('You left the room.');
   };
 

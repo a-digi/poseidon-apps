@@ -58,8 +58,18 @@ export class Connection {
     this.send(hello);
   }
 
+  sendHelloResume(room: string, resumeToken: string): void {
+    const hello: Hello = { type: 'hello', room, name: '', resumeToken };
+    this.send(hello);
+  }
+
   sendAction(action: ClientAction): void {
     this.send(action);
+  }
+
+  sendLeave(): void {
+    this.sendAction({ type: 'leave_game' });
+    setTimeout(() => this.disconnect(), 100);
   }
 
   disconnect(): void {

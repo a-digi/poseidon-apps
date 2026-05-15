@@ -67,6 +67,7 @@ export interface Welcome {
   type: 'welcome';
   playerId: string;
   room: string;
+  resumeToken: string;
   you: { name: string; color: string };
 }
 
@@ -93,6 +94,7 @@ export interface Hello {
   type: 'hello';
   room: string;
   name: string;
+  resumeToken?: string;
 }
 
 export interface PickCivilization {
@@ -173,6 +175,10 @@ export interface EndTurn {
   type: 'end_turn';
 }
 
+export interface LeaveGame {
+  type: 'leave_game';
+}
+
 export type ClientAction =
   | PickCivilization
   | PickStartingTile
@@ -185,4 +191,5 @@ export type ClientAction =
   | AcceptDiplomacy
   | DeclineDiplomacy
   | CancelDiplomacy
-  | EndTurn;
+  | EndTurn
+  | LeaveGame;
