@@ -104,7 +104,44 @@ export interface ErrorMsg {
   message: string;
 }
 
-export type ServerMessage = Welcome | StateMsg | ErrorMsg;
+export type EventKind =
+  | 'pick_civilization'
+  | 'pick_starting_tile'
+  | 'recruit'
+  | 'upgrade'
+  | 'move'
+  | 'attack_won'
+  | 'attack_lost'
+  | 'attack_tie'
+  | 'buy_tile'
+  | 'upgrade_tile'
+  | 'offer_diplomacy'
+  | 'accept_diplomacy'
+  | 'decline_diplomacy'
+  | 'end_turn';
+
+export interface GameEvent {
+  kind: EventKind;
+  actorId: string;
+  actorName: string;
+  targetQ?: number;
+  targetR?: number;
+  fromQ?: number;
+  fromR?: number;
+  defenderId?: string;
+  defenderName?: string;
+  unit?: UnitType;
+  unitCount?: number;
+  tileName?: string;
+  civId?: string;
+}
+
+export interface EventMsg {
+  type: 'event';
+  event: GameEvent;
+}
+
+export type ServerMessage = Welcome | StateMsg | ErrorMsg | EventMsg;
 
 export interface Hello {
   type: 'hello';

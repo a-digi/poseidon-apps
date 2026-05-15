@@ -2,6 +2,7 @@ import type {
   Welcome,
   StateMsg,
   ErrorMsg,
+  EventMsg,
   ServerMessage,
   ClientAction,
   Hello,
@@ -11,6 +12,7 @@ export interface ConnectionCallbacks {
   onWelcome?: (msg: Welcome) => void;
   onState?: (msg: StateMsg) => void;
   onError?: (msg: ErrorMsg) => void;
+  onEvent?: (msg: EventMsg) => void;
   onClose?: () => void;
 }
 
@@ -151,6 +153,9 @@ export class Connection {
       case 'error':
         this.callbacks.onError?.(msg);
         return;
+      case 'event':
+        this.callbacks.onEvent?.(msg);
+        return;
     }
   }
 
@@ -171,5 +176,5 @@ export class Connection {
 function isServerMessage(value: unknown): value is ServerMessage {
   if (typeof value !== 'object' || value === null) return false;
   const t = (value as { type?: unknown }).type;
-  return t === 'welcome' || t === 'state' || t === 'error';
+  return t === 'welcome' || t === 'state' || t === 'error' || t === 'event';
 }

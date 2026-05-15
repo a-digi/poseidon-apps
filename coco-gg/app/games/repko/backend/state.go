@@ -96,6 +96,7 @@ type GameState struct {
 	PlayersActedThisRound map[string]bool `json:"-"`
 	PendingDiplomacy      []DiplomacyOffer
 	WinnerID              string
+	pendingEvents         []GameEvent
 }
 
 func (g *GameState) tile(q, r int) *Tile {
@@ -207,4 +208,14 @@ func newPlayerState(id, name, color string) *PlayerState {
 		Color:     color,
 		Resources: emptyResourceBank(),
 	}
+}
+
+func (g *GameState) emit(e GameEvent) {
+	g.pendingEvents = append(g.pendingEvents, e)
+}
+
+func (g *GameState) takeEvents() []GameEvent {
+	events := g.pendingEvents
+	g.pendingEvents = nil
+	return events
 }

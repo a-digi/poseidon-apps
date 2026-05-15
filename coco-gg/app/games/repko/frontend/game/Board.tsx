@@ -4,6 +4,7 @@ import type { PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactW
 import type { GarrisonStack, ResourceType, StateMsg, Tile } from '../types';
 import { boardBounds, hexCorner, hexToPixel } from './coords';
 import { BASE_POWER, UNIT_ICON } from './units';
+import type { Animation } from './GameView';
 
 interface BoardProps {
   state: StateMsg;
@@ -14,7 +15,29 @@ interface BoardProps {
   onTileClick?: (q: number, r: number) => void;
   attackMode?: boolean;
   inspectedTile?: { q: number; r: number } | null;
+  animations?: Animation[];
 }
+
+const ANIM_CLASS: Record<Animation['kind'], string> = {
+  claim: 'anim-claim',
+  conquest: 'anim-conquest',
+  repulsed: 'anim-repulsed',
+  tie: 'anim-tie',
+};
+
+const ANIM_EMOJI: Record<Animation['kind'], string> = {
+  claim: '💰',
+  conquest: '💥',
+  repulsed: '🛡️',
+  tie: '⚔️',
+};
+
+const ANIM_STROKE: Record<Animation['kind'], string> = {
+  claim: '#eab308',
+  conquest: '#dc2626',
+  repulsed: '#2563eb',
+  tie: '#ea580c',
+};
 
 const HEX_SIZE = 28;
 const MARGIN = 20;
@@ -307,6 +330,7 @@ export function Board({
   onTileClick,
   attackMode,
   inspectedTile,
+  animations,
 }: BoardProps) {
   const tiles = state.board?.tiles ?? [];
 
@@ -797,6 +821,34 @@ export function Board({
                   {stackRow.map((s) => `${s.icon}${s.level === 1 ? '' : s.level === 2 ? '²' : '³'}×${s.count}`).join(' ')}
                 </text>
               )}
+            </g>
+          );
+        })}
+        {animations?.map((anim) => {
+          const { x, y } = hexToPixel(anim.q, anim.r, HEX_SIZE);
+          return (
+            <g
+              key={anim.id}
+              transform={`translate(${x},${y})`}
+              className={`tile-animation ${ANIM_CLASS[anim.kind]}`}
+            >
+              <circle
+                cx={0}
+                cy={0}
+                r={HEX_SIZE * 0.8}
+                fill="none"
+                stroke={ANIM_STROKE[anim.kind]}
+                strokeWidth={2.5}
+              />
+              <text
+                x={0}
+                y={0}
+                textAnchor="middle"
+                dominantBaseline="central"
+                style={{ fontSize: HEX_SIZE * 0.9 }}
+              >
+                {ANIM_EMOJI[anim.kind]}
+              </text>
             </g>
           );
         })}

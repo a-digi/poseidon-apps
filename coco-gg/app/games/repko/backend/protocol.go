@@ -22,6 +22,7 @@ const (
 	MsgWelcome MessageType = "welcome"
 	MsgState   MessageType = "state"
 	MsgError   MessageType = "error"
+	MsgEvent   MessageType = "event"
 )
 
 type Hello struct {
@@ -149,4 +150,25 @@ type EndTurn struct {
 
 type LeaveGame struct {
 	Type MessageType `json:"type"`
+}
+
+type GameEvent struct {
+	Kind         string   `json:"kind"`
+	ActorID      string   `json:"actorId"`
+	ActorName    string   `json:"actorName"`
+	TargetQ      *int     `json:"targetQ,omitempty"`
+	TargetR      *int     `json:"targetR,omitempty"`
+	FromQ        *int     `json:"fromQ,omitempty"`
+	FromR        *int     `json:"fromR,omitempty"`
+	DefenderID   string   `json:"defenderId,omitempty"`
+	DefenderName string   `json:"defenderName,omitempty"`
+	Unit         UnitType `json:"unit,omitempty"`
+	UnitCount    int      `json:"unitCount,omitempty"`
+	TileName     string   `json:"tileName,omitempty"`
+	CivID        string   `json:"civId,omitempty"`
+}
+
+type EventEnvelope struct {
+	Type  MessageType `json:"type"`
+	Event GameEvent   `json:"event"`
 }

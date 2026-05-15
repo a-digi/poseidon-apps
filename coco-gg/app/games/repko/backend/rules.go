@@ -6,6 +6,8 @@ import (
 	"sort"
 )
 
+func intPtr(n int) *int { return &n }
+
 var (
 	ErrNoGame = errors.New("game has not started")
 
@@ -163,6 +165,12 @@ func validateAndApplyPickCivilization(state *GameState, playerID string, a Actio
 	}
 	player.CivilizationID = a.CivilizationID
 	state.PickedCivs[a.CivilizationID] = playerID
+	state.emit(GameEvent{
+		Kind:      "pick_civilization",
+		ActorID:   playerID,
+		ActorName: player.Name,
+		CivID:     a.CivilizationID,
+	})
 	advanceCivPick(state)
 	return nil
 }
@@ -198,6 +206,14 @@ func validateAndApplyPickStartingTile(state *GameState, playerID string, a Actio
 		ResourceCredits: 30,
 		ResourceSteel:   5,
 		ResourceFuel:    60,
+	})
+	state.emit(GameEvent{
+		Kind:      "pick_starting_tile",
+		ActorID:   playerID,
+		ActorName: player.Name,
+		TargetQ:   intPtr(a.Q),
+		TargetR:   intPtr(a.R),
+		TileName:  tile.Name,
 	})
 	advanceTilePick(state)
 	return nil
@@ -254,6 +270,16 @@ func validateAndApplyRecruit(state *GameState, playerID string, a ActionRecruit)
 	}
 	player.Resources.deduct(total)
 	addToStack(&tile.Garrison, a.Unit, 1, a.Count)
+	state.emit(GameEvent{
+		Kind:      "recruit",
+		ActorID:   playerID,
+		ActorName: player.Name,
+		TargetQ:   intPtr(a.Q),
+		TargetR:   intPtr(a.R),
+		TileName:  tile.Name,
+		Unit:      a.Unit,
+		UnitCount: a.Count,
+	})
 	return nil
 }
 
@@ -305,6 +331,15 @@ func validateAndApplyUpgrade(state *GameState, playerID string, a ActionUpgrade)
 		tile.Garrison = append(tile.Garrison[:a.StackIndex], tile.Garrison[a.StackIndex+1:]...)
 	}
 	addToStack(&tile.Garrison, srcType, srcLevel+1, 1)
+	state.emit(GameEvent{
+		Kind:      "upgrade",
+		ActorID:   playerID,
+		ActorName: player.Name,
+		TargetQ:   intPtr(a.Q),
+		TargetR:   intPtr(a.R),
+		TileName:  tile.Name,
+		Unit:      srcType,
+	})
 	advancePlayingTurn(state)
 	return nil
 }
@@ -346,6 +381,16 @@ func validateAndApplyMove(state *GameState, playerID string, a ActionMove) error
 	}
 	fromTile.Garrison = filterNonEmpty(fromTile.Garrison)
 	state.UsedActionsThisTurn[actionKeyMove]++
+	state.emit(GameEvent{
+		Kind:      "move",
+		ActorID:   playerID,
+		ActorName: state.playerByID(playerID).Name,
+		FromQ:     intPtr(a.FromQ),
+		FromR:     intPtr(a.FromR),
+		TargetQ:   intPtr(a.ToQ),
+		TargetR:   intPtr(a.ToR),
+		TileName:  toTile.Name,
+	})
 	advancePlayingTurn(state)
 	return nil
 }
@@ -417,6 +462,32 @@ func validateAndApplyAttack(state *GameState, playerID string, a ActionAttack) e
 	log.Printf("game: repko combat (attacker=%s defender=%s from=(%d,%d) to=(%d,%d) result=%s survivors_power=%d)",
 		playerID, defenderID, from.Q, from.R, to.Q, to.R, outcome, totalPower(survivors))
 
+	var eventKind string
+	switch outcome {
+	case "attacker_won":
+		eventKind = "attack_won"
+	case "tie_neutral":
+		eventKind = "attack_tie"
+	default:
+		eventKind = "attack_lost"
+	}
+	defenderName := ""
+	if defPlayer := state.playerByID(defenderID); defPlayer != nil {
+		defenderName = defPlayer.Name
+	}
+	state.emit(GameEvent{
+		Kind:         eventKind,
+		ActorID:      playerID,
+		ActorName:    state.playerByID(playerID).Name,
+		FromQ:        intPtr(a.FromQ),
+		FromR:        intPtr(a.FromR),
+		TargetQ:      intPtr(a.ToQ),
+		TargetR:      intPtr(a.ToR),
+		DefenderID:   defenderID,
+		DefenderName: defenderName,
+		TileName:     toTile.Name,
+	})
+
 	checkAndApplyWin(state)
 	advancePlayingTurn(state)
 	return nil
@@ -456,6 +527,14 @@ func validateAndApplyBuyTile(state *GameState, playerID string, a ActionBuyTile)
 	tile.OwnerID = playerID
 	log.Printf("game: repko buy_tile (player=%s tile=(%d,%d) cost=%dc)",
 		playerID, a.Q, a.R, cost[ResourceCredits])
+	state.emit(GameEvent{
+		Kind:      "buy_tile",
+		ActorID:   playerID,
+		ActorName: player.Name,
+		TargetQ:   intPtr(a.Q),
+		TargetR:   intPtr(a.R),
+		TileName:  tile.Name,
+	})
 	advancePlayingTurn(state)
 	return nil
 }
@@ -486,6 +565,14 @@ func validateAndApplyUpgradeTile(state *GameState, playerID string, a ActionUpgr
 	tile.Yields[tile.Production]++
 	log.Printf("game: repko upgrade_tile (player=%s tile=(%d,%d) production=%s yield=%d)",
 		playerID, a.Q, a.R, tile.Production, tile.Yields[tile.Production])
+	state.emit(GameEvent{
+		Kind:      "upgrade_tile",
+		ActorID:   playerID,
+		ActorName: player.Name,
+		TargetQ:   intPtr(a.Q),
+		TargetR:   intPtr(a.R),
+		TileName:  tile.Name,
+	})
 	advancePlayingTurn(state)
 	return nil
 }
@@ -531,6 +618,20 @@ func validateAndApplyOfferDiplomacy(state *GameState, playerID string, a ActionO
 		DefenderID: tile.OwnerID,
 	})
 	log.Printf("game: repko diplomacy offer cost (player=%s credits=%d)", playerID, cost[ResourceCredits])
+	defenderName := ""
+	if defPlayer := state.playerByID(tile.OwnerID); defPlayer != nil {
+		defenderName = defPlayer.Name
+	}
+	state.emit(GameEvent{
+		Kind:         "offer_diplomacy",
+		ActorID:      playerID,
+		ActorName:    player.Name,
+		TargetQ:      intPtr(a.Q),
+		TargetR:      intPtr(a.R),
+		DefenderID:   tile.OwnerID,
+		DefenderName: defenderName,
+		TileName:     tile.Name,
+	})
 	advancePlayingTurn(state)
 	return nil
 }
@@ -571,6 +672,30 @@ func validateAndApplyAcceptDiplomacy(state *GameState, playerID string, a Action
 	fromTile.OwnerID = attackerID
 	state.removeDiplomacy(a.Q, a.R)
 
+	actor := state.playerByID(playerID)
+	actorName := ""
+	if actor != nil {
+		actorName = actor.Name
+	}
+	tileName := ""
+	if fromTile != nil {
+		tileName = fromTile.Name
+	}
+	attackerName := ""
+	if attacker := state.playerByID(attackerID); attacker != nil {
+		attackerName = attacker.Name
+	}
+	state.emit(GameEvent{
+		Kind:         "accept_diplomacy",
+		ActorID:      playerID,
+		ActorName:    actorName,
+		TargetQ:      intPtr(a.Q),
+		TargetR:      intPtr(a.R),
+		DefenderID:   attackerID,
+		DefenderName: attackerName,
+		TileName:     tileName,
+	})
+
 	checkAndApplyWin(state)
 	return nil
 }
@@ -587,6 +712,23 @@ func validateAndApplyDeclineDiplomacy(state *GameState, playerID string, a Actio
 		return ErrNotYourDiplomacyOffer
 	}
 	state.removeDiplomacy(a.Q, a.R)
+	actorName := ""
+	if actor := state.playerByID(playerID); actor != nil {
+		actorName = actor.Name
+	}
+	tile := state.tile(a.Q, a.R)
+	tileName := ""
+	if tile != nil {
+		tileName = tile.Name
+	}
+	state.emit(GameEvent{
+		Kind:      "decline_diplomacy",
+		ActorID:   playerID,
+		ActorName: actorName,
+		TargetQ:   intPtr(a.Q),
+		TargetR:   intPtr(a.R),
+		TileName:  tileName,
+	})
 	return nil
 }
 
@@ -605,6 +747,23 @@ func validateAndApplyCancelDiplomacy(state *GameState, playerID string, a Action
 		return ErrNotYourDiplomacyOffer
 	}
 	state.removeDiplomacy(a.Q, a.R)
+	actorName := ""
+	if actor := state.playerByID(playerID); actor != nil {
+		actorName = actor.Name
+	}
+	tile := state.tile(a.Q, a.R)
+	tileName := ""
+	if tile != nil {
+		tileName = tile.Name
+	}
+	state.emit(GameEvent{
+		Kind:      "decline_diplomacy",
+		ActorID:   playerID,
+		ActorName: actorName,
+		TargetQ:   intPtr(a.Q),
+		TargetR:   intPtr(a.R),
+		TileName:  tileName,
+	})
 	return nil
 }
 
@@ -612,6 +771,15 @@ func validateAndApplyEndTurn(state *GameState, playerID string) error {
 	if state.Phase != PhasePlaying {
 		return ErrInvalidPhase
 	}
+	actorName := ""
+	if actor := state.playerByID(playerID); actor != nil {
+		actorName = actor.Name
+	}
+	state.emit(GameEvent{
+		Kind:      "end_turn",
+		ActorID:   playerID,
+		ActorName: actorName,
+	})
 	advancePlayingTurn(state)
 	return nil
 }

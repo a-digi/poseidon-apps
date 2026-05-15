@@ -43,3 +43,51 @@ body,
     --card-foreground: 222.2 84% 4.9%;
   }
 }
+
+.tile-animation { pointer-events: none; }
+
+@keyframes anim-claim-kf {
+  0%   { transform: scale(0.2); opacity: 1; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.anim-claim circle, .anim-claim text {
+  animation: anim-claim-kf 1.5s ease-out forwards;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+@keyframes anim-conquest-kf {
+  0%   { transform: scale(0.2); opacity: 1; }
+  35%  { transform: scale(1.6) rotate(-5deg); opacity: 1; }
+  70%  { transform: scale(1.4) rotate(5deg); opacity: 0.7; }
+  100% { transform: scale(2.5) rotate(0deg); opacity: 0; }
+}
+.anim-conquest circle, .anim-conquest text {
+  animation: anim-conquest-kf 1.5s ease-out forwards;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+@keyframes anim-repulsed-kf {
+  0%   { transform: scale(0.5); opacity: 1; }
+  25%  { transform: scale(1.3); opacity: 1; }
+  50%  { transform: scale(0.9); opacity: 1; }
+  75%  { transform: scale(1.2); opacity: 0.6; }
+  100% { transform: scale(0.8); opacity: 0; }
+}
+.anim-repulsed circle, .anim-repulsed text {
+  animation: anim-repulsed-kf 1.5s ease-in-out forwards;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+@keyframes anim-tie-kf {
+  0%   { transform: scale(0.5) rotate(0deg); opacity: 1; }
+  50%  { transform: scale(1.5) rotate(180deg); opacity: 1; }
+  100% { transform: scale(2.0) rotate(360deg); opacity: 0; }
+}
+.anim-tie circle, .anim-tie text {
+  animation: anim-tie-kf 1.5s linear forwards;
+  transform-origin: center;
+  transform-box: fill-box;
+}

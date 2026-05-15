@@ -380,6 +380,33 @@ func (r *Room) Broadcast() {
 	}
 }
 
+// BroadcastEvents sends each event as a separate EventEnvelope frame to every
+// player in the room. Non-blocking, same drop-on-full-channel semantics as Broadcast.
+func (r *Room) BroadcastEvents(events []GameEvent) {
+	if len(events) == 0 {
+		return
+	}
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return
+	}
+	recipients := make([]*Player, len(r.players))
+	copy(recipients, r.players)
+	r.mu.Unlock()
+
+	for _, e := range events {
+		env := EventEnvelope{Type: MsgEvent, Event: e}
+		b, _ := json.Marshal(env)
+		for _, p := range recipients {
+			select {
+			case p.SendCh <- b:
+			default:
+			}
+		}
+	}
+}
+
 func (r *Room) buildSnapshotsLocked() map[string][]byte {
 	out := make(map[string][]byte, len(r.players))
 	if r.state == nil {

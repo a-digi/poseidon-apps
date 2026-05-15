@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
-import type { ClientAction, StackPick, StateMsg, Tile, UnitClass } from '../types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ClientAction, GameEvent, StackPick, StateMsg, Tile, UnitClass } from '../types';
 import { Board } from './Board';
 import {
   ActionPanel,
@@ -11,12 +11,24 @@ import { PlayerStatus } from './PlayerStatus';
 import { ResourcePanel } from './ResourcePanel';
 import { CivilizationPicker } from './CivilizationPicker';
 import { DiplomacyBanner } from './DiplomacyBanner';
+import { EventBanner } from './EventBanner';
 import { reachableForAction } from './coords';
 import { UNIT_CLASS } from './units';
+
+export interface Animation {
+  id: string;
+  kind: 'claim' | 'conquest' | 'repulsed' | 'tie';
+  q: number;
+  r: number;
+  expiresAt: number;
+}
+
+const ANIMATION_DURATION_MS = 1500;
 
 interface GameViewProps {
   state: StateMsg | null;
   myPlayerId: string | null;
+  events: GameEvent[];
   onAction: (action: ClientAction) => void;
   onLeave: () => void;
 }
@@ -29,7 +41,7 @@ function findTile(state: StateMsg, q: number, r: number): Tile | undefined {
   return (state.board?.tiles ?? []).find((t) => t.q === q && t.r === r);
 }
 
-export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps) {
+export function GameView({ state, myPlayerId, events, onAction, onLeave }: GameViewProps) {
   const [panelHidden, setPanelHidden] = useState(false);
   const [selectedTile, setSelectedTile] = useState<{ q: number; r: number } | null>(null);
   const [subAction, setSubAction] = useState<SubAction>('inspect');
@@ -37,6 +49,45 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
   const [attackSourceOverride, setAttackSourceOverride] = useState<
     { q: number; r: number } | null
   >(null);
+  const [animations, setAnimations] = useState<Animation[]>([]);
+  const eventCursorRef = useRef(0);
+
+  useEffect(() => {
+    if (events.length <= eventCursorRef.current) {
+      eventCursorRef.current = events.length;
+      return;
+    }
+    const newAnims: Animation[] = [];
+    for (let i = eventCursorRef.current; i < events.length; i++) {
+      const ev = events[i];
+      if (ev.targetQ === undefined || ev.targetR === undefined) continue;
+      let kind: Animation['kind'] | null = null;
+      if (ev.kind === 'buy_tile') kind = 'claim';
+      else if (ev.kind === 'attack_won') kind = 'conquest';
+      else if (ev.kind === 'attack_lost') kind = 'repulsed';
+      else if (ev.kind === 'attack_tie') kind = 'tie';
+      if (kind === null) continue;
+      newAnims.push({
+        id: `${i}-${kind}-${Math.random().toString(36).slice(2, 7)}`,
+        kind,
+        q: ev.targetQ,
+        r: ev.targetR,
+        expiresAt: Date.now() + ANIMATION_DURATION_MS,
+      });
+    }
+    eventCursorRef.current = events.length;
+    if (newAnims.length === 0) return;
+    setAnimations((prev) => [...prev, ...newAnims]);
+  }, [events]);
+
+  useEffect(() => {
+    if (animations.length === 0) return;
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      setAnimations((prev) => prev.filter((a) => a.expiresAt > now));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [animations.length]);
 
   const isMyTurn =
     state !== null &&
@@ -210,7 +261,12 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
         : '';
 
     if (myCommittedCivId === '') {
-      return <CivilizationPicker state={state} myPlayerId={myPlayerId} onAction={onAction} />;
+      return (
+        <>
+          <EventBanner events={events} myPlayerId={myPlayerId} />
+          <CivilizationPicker state={state} myPlayerId={myPlayerId} onAction={onAction} />
+        </>
+      );
     }
 
     const totalPlayers = state.players.length;
@@ -219,87 +275,99 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
     const playerWord = remaining === 1 ? 'player' : 'players';
 
     return (
-      <div className="fixed inset-0 flex flex-col bg-slate-50">
-        <header className="border-b border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
-          Waiting for {remaining} of {totalPlayers} {playerWord} to pick their civilization…
-        </header>
-        <main className="relative flex-1 overflow-hidden">
-          <Board state={state} myPlayerId={myPlayerId} />
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="rounded-md bg-white/90 px-3 py-2 text-xs text-slate-700 shadow">
-              Preparing the field…
+      <>
+        <EventBanner events={events} myPlayerId={myPlayerId} />
+        <div className="fixed inset-0 flex flex-col bg-slate-50">
+          <header className="border-b border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
+            Waiting for {remaining} of {totalPlayers} {playerWord} to pick their civilization…
+          </header>
+          <main className="relative flex-1 overflow-hidden">
+            <Board state={state} myPlayerId={myPlayerId} />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="rounded-md bg-white/90 px-3 py-2 text-xs text-slate-700 shadow">
+                Preparing the field…
+              </div>
             </div>
-          </div>
-        </main>
-      </div>
+          </main>
+        </div>
+      </>
     );
   }
 
   if (state.phase === 'tile_pick') {
     const current = state.players.find((p) => p.id === state.currentTurn?.playerId) ?? null;
     return (
-      <div className="fixed inset-0 flex flex-col bg-slate-100">
-        <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-          <button
-            type="button"
-            onClick={onLeave}
-            className="text-xs text-slate-500 hover:text-slate-900"
-          >
-            ← Leave
-          </button>
-          <span className="text-sm font-medium text-slate-800">
-            {isMyTurn ? 'Pick your starting tile' : `Waiting for ${current?.name ?? '…'} to pick…`}
-          </span>
-        </header>
-        <main className="relative flex-1 overflow-hidden">
-          <Board
-            state={state}
-            myPlayerId={myPlayerId}
-            startingTileHighlights={isMyTurn ? neutralTileKeys : new Set()}
-            onTileClick={handleStartingTilePick}
-          />
-        </main>
-      </div>
+      <>
+        <EventBanner events={events} myPlayerId={myPlayerId} />
+        <div className="fixed inset-0 flex flex-col bg-slate-100">
+          <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
+            <button
+              type="button"
+              onClick={onLeave}
+              className="text-xs text-slate-500 hover:text-slate-900"
+            >
+              ← Leave
+            </button>
+            <span className="text-sm font-medium text-slate-800">
+              {isMyTurn ? 'Pick your starting tile' : `Waiting for ${current?.name ?? '…'} to pick…`}
+            </span>
+          </header>
+          <main className="relative flex-1 overflow-hidden">
+            <Board
+              state={state}
+              myPlayerId={myPlayerId}
+              animations={animations}
+              startingTileHighlights={isMyTurn ? neutralTileKeys : new Set()}
+              onTileClick={handleStartingTilePick}
+            />
+          </main>
+        </div>
+      </>
     );
   }
 
   if (state.phase === 'game_over') {
     const winner = state.players.find((p) => p.id === state.winnerId) ?? null;
     return (
-      <div className="fixed inset-0 flex flex-col bg-slate-100">
-        <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-          <button
-            type="button"
-            onClick={onLeave}
-            className="text-xs text-slate-500 hover:text-slate-900"
-          >
-            ← Leave
-          </button>
-          <span className="text-sm font-medium text-slate-800">Game over</span>
-        </header>
-        <main className="relative flex-1 overflow-hidden">
-          <Board state={state} myPlayerId={myPlayerId} />
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40">
-            <div className="flex flex-col items-center gap-3 rounded-lg bg-white px-6 py-4 shadow-lg">
-              <p className="text-lg font-semibold text-slate-900">
-                {winner !== null ? `${winner.name} wins!` : 'No winner'}
-              </p>
-              <button
-                type="button"
-                onClick={onLeave}
-                className="rounded bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-700"
-              >
-                Leave
-              </button>
+      <>
+        <EventBanner events={events} myPlayerId={myPlayerId} />
+        <div className="fixed inset-0 flex flex-col bg-slate-100">
+          <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
+            <button
+              type="button"
+              onClick={onLeave}
+              className="text-xs text-slate-500 hover:text-slate-900"
+            >
+              ← Leave
+            </button>
+            <span className="text-sm font-medium text-slate-800">Game over</span>
+          </header>
+          <main className="relative flex-1 overflow-hidden">
+            <Board state={state} myPlayerId={myPlayerId} animations={animations} />
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40">
+              <div className="flex flex-col items-center gap-3 rounded-lg bg-white px-6 py-4 shadow-lg">
+                <p className="text-lg font-semibold text-slate-900">
+                  {winner !== null ? `${winner.name} wins!` : 'No winner'}
+                </p>
+                <button
+                  type="button"
+                  onClick={onLeave}
+                  className="rounded bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-700"
+                >
+                  Leave
+                </button>
+              </div>
             </div>
-          </div>
-        </main>
-      </div>
+          </main>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-slate-100">
+    <>
+      <EventBanner events={events} myPlayerId={myPlayerId} />
+      <div className="fixed inset-0 flex flex-col bg-slate-100">
       <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
         <button
           type="button"
@@ -325,6 +393,7 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
         <Board
           state={state}
           myPlayerId={myPlayerId}
+          animations={animations}
           reachableHighlights={reachableHighlights}
           selectedSource={boardSelectedSource}
           onTileClick={handlePlayingTileClick}
@@ -380,7 +449,8 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
           onAction={onAction}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

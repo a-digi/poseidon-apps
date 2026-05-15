@@ -340,8 +340,10 @@ func (h *wsHandler) dispatch(room *Room, player *Player, action any) {
 		return
 	}
 	err := ValidateAndApply(state, player.ID, action)
+	var events []GameEvent
 	phase := state.Phase
 	if err == nil {
+		events = state.takeEvents()
 		room.armTurnTimerLocked()
 	}
 	room.mu.Unlock()
@@ -350,8 +352,9 @@ func (h *wsHandler) dispatch(room *Room, player *Player, action any) {
 		sendError(player, err.Error())
 		return
 	}
-	log.Printf("game: repko action accepted (room=%s player_id=%s action=%s phase=%s)", room.Code, player.ID, actionType, phase)
+	log.Printf("game: repko action accepted (room=%s player_id=%s action=%s phase=%s events=%d)", room.Code, player.ID, actionType, phase, len(events))
 	room.Broadcast()
+	room.BroadcastEvents(events)
 }
 
 func actionTypeName(action any) string {

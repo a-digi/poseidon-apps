@@ -4,7 +4,7 @@ import { Connection } from './game/Connection';
 import { GameView } from './game/GameView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { leaveRoom } from './api';
-import type { ClientAction, ErrorMsg, StateMsg } from './types';
+import type { ClientAction, ErrorMsg, GameEvent, StateMsg } from './types';
 
 const MAX_NAME_LENGTH = 32;
 
@@ -21,6 +21,7 @@ function MobilePage() {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [state, setState] = useState<StateMsg | null>(null);
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
+  const [events, setEvents] = useState<GameEvent[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const connectionRef = useRef<Connection | null>(null);
   const phaseRef = useRef<Phase>(phase);
@@ -91,6 +92,9 @@ function MobilePage() {
           console.info('[repko/MobilePage] state', { phase: msg.phase, players: msg.players.length });
           setState(msg);
         },
+        onEvent: (msg) => {
+          setEvents((prev) => [...prev, msg.event].slice(-50));
+        },
         onError: (msg) => {
           if (msg.message.startsWith('resume failed:')) {
             console.warn('[repko/MobilePage] resume failed', msg.message);
@@ -134,6 +138,7 @@ function MobilePage() {
     connectionRef.current?.disconnect();
     setConnection(null);
     setState(null);
+    setEvents([]);
     setMyPlayerId(null);
     setErrorMessage(message);
     setPhase('name');
@@ -201,6 +206,7 @@ function MobilePage() {
     if (!canJoin || room === null || token === null) return;
     setErrorMessage(null);
     setState(null);
+    setEvents([]);
     setMyPlayerId(null);
     setPhase('joining');
     const wsUrl = buildWsUrl(window.location.host, 'repko', room, token);
@@ -224,6 +230,9 @@ function MobilePage() {
             currentTurn: msg.currentTurn ?? null,
           });
           setState(msg);
+        },
+        onEvent: (msg) => {
+          setEvents((prev) => [...prev, msg.event].slice(-50));
         },
         onError: (msg) => {
           console.warn('[repko/MobilePage] error', msg);
@@ -323,6 +332,7 @@ function MobilePage() {
         <GameView
           state={state}
           myPlayerId={myPlayerId}
+          events={events}
           onAction={handleAction}
           onLeave={handleLeave}
         />
