@@ -14,6 +14,8 @@ const (
 	maxPlayers     = 6
 )
 
+const turnTimeout = 60 * time.Second
+
 var colorPalette = []string{
 	"#dc2626", "#2563eb", "#16a34a", "#ea580c",
 	"#9333ea", "#0d9488", "#db2777", "#ca8a04",
@@ -35,24 +37,37 @@ type Room struct {
 	Code                  string
 	CreatedAt             time.Time
 	LastEmptyAt           *time.Time
+	MaxRounds             int
 	mu                    sync.Mutex
 	closed                bool
 	players               []*Player
 	state                 *GameState
+	expectedPlayers       int
 	resumeTokens          map[string]string
 	playerIDToResumeToken map[string]string
+	turnTimer             *time.Timer
 }
 
-func NewRoom(code string) *Room {
+func NewRoom(code string, expectedPlayers, maxRounds int) *Room {
 	now := time.Now()
 	return &Room{
 		Code:                  code,
 		CreatedAt:             now,
 		LastEmptyAt:           &now,
+		MaxRounds:             maxRounds,
 		players:               make([]*Player, 0, maxPlayers),
+		expectedPlayers:       expectedPlayers,
 		resumeTokens:          make(map[string]string),
 		playerIDToResumeToken: make(map[string]string),
 	}
+}
+
+// ShouldAutoStart returns true when the expected player count has been reached
+// and the game has not yet started. Safe to call without holding r.mu.
+func (r *Room) ShouldAutoStart() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.expectedPlayers > 0 && r.state == nil && len(r.players) >= r.expectedPlayers
 }
 
 func (r *Room) Phase() string {
@@ -275,14 +290,17 @@ func (r *Room) StartGame() error {
 	}
 	civs := append([]Civilization(nil), Civilizations...)
 	r.state = &GameState{
-		Phase:               PhaseCivPick,
-		Board:               board,
-		Players:             ps,
-		Current:             nil,
-		Civilizations:       civs,
-		PickedCivs:          map[string]string{},
-		UsedActionsThisTurn: map[string]int{},
-		PendingDiplomacy:    make([]DiplomacyOffer, 0),
+		Phase:                 PhaseCivPick,
+		Board:                 board,
+		Players:               ps,
+		Current:               nil,
+		Civilizations:         civs,
+		PickedCivs:            map[string]string{},
+		UsedActionsThisTurn:   map[string]int{},
+		MaxRounds:             r.MaxRounds,
+		RoundNumber:           1,
+		PlayersActedThisRound: map[string]bool{},
+		PendingDiplomacy:      make([]DiplomacyOffer, 0),
 	}
 	code := r.Code
 	tiles := len(board.Tiles)
@@ -371,6 +389,8 @@ func (r *Room) buildSnapshotsLocked() map[string][]byte {
 		Current:          r.state.Current,
 		PendingDiplomacy: pending,
 		WinnerID:         r.state.WinnerID,
+		MaxRounds:        r.state.MaxRounds,
+		RoundNumber:      r.state.RoundNumber,
 	}
 	if r.state.Phase == PhaseCivPick {
 		base.Civilizations = r.state.Civilizations
@@ -391,12 +411,51 @@ func (r *Room) buildSnapshotsLocked() map[string][]byte {
 	return out
 }
 
+func (r *Room) armTurnTimerLocked() {
+	if r.turnTimer != nil {
+		r.turnTimer.Stop()
+		r.turnTimer = nil
+	}
+	if r.closed || r.state == nil || r.state.Phase != PhasePlaying || r.state.Current == nil {
+		return
+	}
+	playerID := r.state.Current.PlayerID
+	deadline := time.Now().Add(turnTimeout).UnixMilli()
+	r.state.Current.DeadlineMs = deadline
+	r.turnTimer = time.AfterFunc(turnTimeout, func() {
+		r.handleTurnTimeout(playerID, deadline)
+	})
+}
+
+func (r *Room) handleTurnTimeout(expectedPlayerID string, expectedDeadlineMs int64) {
+	r.mu.Lock()
+	valid := !r.closed &&
+		r.state != nil &&
+		r.state.Phase == PhasePlaying &&
+		r.state.Current != nil &&
+		r.state.Current.PlayerID == expectedPlayerID &&
+		r.state.Current.DeadlineMs == expectedDeadlineMs
+	if !valid {
+		r.mu.Unlock()
+		return
+	}
+	log.Printf("game: turn timeout (room=%s player=%s)", r.Code, expectedPlayerID)
+	advancePlayingTurn(r.state)
+	r.armTurnTimerLocked()
+	r.mu.Unlock()
+	r.Broadcast()
+}
+
 // Close closes all player SendChs and marks the room closed. Idempotent.
 func (r *Room) Close() {
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
 		return
+	}
+	if r.turnTimer != nil {
+		r.turnTimer.Stop()
+		r.turnTimer = nil
 	}
 	r.closed = true
 	r.resumeTokens = make(map[string]string)

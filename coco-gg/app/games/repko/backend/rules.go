@@ -771,6 +771,8 @@ func advanceTilePick(state *GameState) {
 		}
 	}
 	state.Phase = PhasePlaying
+	state.RoundNumber = 1
+	state.PlayersActedThisRound = map[string]bool{}
 	for _, p := range state.Players {
 		if p.Disconnected {
 			continue
@@ -783,12 +785,55 @@ func advanceTilePick(state *GameState) {
 	state.Current = nil
 }
 
+func playerWithMostTiles(state *GameState) string {
+	counts := state.tileCountByPlayer()
+	var bestID string
+	best := -1
+	for _, p := range state.Players {
+		c := counts[p.ID]
+		if c > best || (c == best && (bestID == "" || p.ID < bestID)) {
+			best = c
+			bestID = p.ID
+		}
+	}
+	return bestID
+}
+
 func advancePlayingTurn(state *GameState) {
 	if state == nil || state.Phase == PhaseGameOver {
 		return
 	}
 	cleanupStaleDiplomacy(state)
 	state.UsedActionsThisTurn = map[string]int{}
+
+	if state.Current != nil {
+		if state.PlayersActedThisRound == nil {
+			state.PlayersActedThisRound = map[string]bool{}
+		}
+		state.PlayersActedThisRound[state.Current.PlayerID] = true
+	}
+
+	allActed := true
+	for _, p := range state.Players {
+		if p.Disconnected || p.Eliminated {
+			continue
+		}
+		if !state.PlayersActedThisRound[p.ID] {
+			allActed = false
+			break
+		}
+	}
+	if allActed {
+		state.RoundNumber++
+		state.PlayersActedThisRound = map[string]bool{}
+		if state.MaxRounds > 0 && state.RoundNumber > state.MaxRounds {
+			state.Phase = PhaseGameOver
+			state.WinnerID = playerWithMostTiles(state)
+			state.Current = nil
+			log.Printf("game: round limit reached (rounds=%d max=%d winner=%s)", state.RoundNumber-1, state.MaxRounds, state.WinnerID)
+			return
+		}
+	}
 
 	currentIdx := -1
 	if state.Current != nil {

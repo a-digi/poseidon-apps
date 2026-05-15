@@ -32,8 +32,12 @@ export interface RoomsList {
   stats: RoomsStats;
 }
 
-export async function createRoom(): Promise<RoomCreated> {
-  const r = await fetch(`${base}/rooms`, { method: 'POST', headers: { ...authHeaders() } });
+export async function createRoom(expectedPlayers: number, maxRounds: number): Promise<RoomCreated> {
+  const r = await fetch(`${base}/rooms`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ expectedPlayers, maxRounds }),
+  });
   if (!r.ok) throw new Error(`createRoom: ${r.statusText}`);
   return r.json() as Promise<RoomCreated>;
 }

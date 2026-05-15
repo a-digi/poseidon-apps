@@ -61,6 +61,7 @@ export interface PlayerState {
 
 export interface CurrentTurn {
   playerId: string;
+  deadlineMs?: number;
 }
 
 export interface YouState {
@@ -85,6 +86,8 @@ export interface StateMsg {
   pendingDiplomacy?: DiplomacyOffer[];
   winnerId?: string;
   you?: YouState;
+  maxRounds?: number;
+  roundNumber?: number;
 }
 
 export interface ErrorMsg {

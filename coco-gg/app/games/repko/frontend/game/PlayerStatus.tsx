@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { StateMsg } from '../types';
 
 interface PlayerStatusProps {
@@ -8,8 +9,24 @@ interface PlayerStatusProps {
 export function PlayerStatus({ state, myPlayerId }: PlayerStatusProps) {
   const civs = state.civilizations ?? [];
   const currentPlayerId = state.currentTurn?.playerId ?? null;
+  const deadlineMs = state.currentTurn?.deadlineMs ?? 0;
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const remainingSec = deadlineMs > 0 ? Math.max(0, Math.ceil((deadlineMs - nowMs) / 1000)) : null;
+  const showRoundCounter = state.maxRounds !== undefined && state.maxRounds > 0;
+
   return (
     <div className="flex flex-1 items-center gap-1.5 overflow-x-auto">
+      {showRoundCounter && (
+        <span className="shrink-0 text-[10px] text-slate-500">
+          Round {state.roundNumber ?? 1} / {state.maxRounds}
+        </span>
+      )}
       {state.players.map((p) => {
         const isCurrent = p.id === currentPlayerId;
         const isMe = p.id === myPlayerId;
@@ -40,6 +57,11 @@ export function PlayerStatus({ state, myPlayerId }: PlayerStatusProps) {
             )}
             {isCurrent && !p.eliminated && (
               <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-500" title="Current turn" />
+            )}
+            {remainingSec !== null && isCurrent && (
+              <span className={`text-[10px] font-semibold ${remainingSec <= 10 ? 'text-red-600' : 'text-slate-600'}`}>
+                ⏱ {remainingSec}s
+              </span>
             )}
           </div>
         );

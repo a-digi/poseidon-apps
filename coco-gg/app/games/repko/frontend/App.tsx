@@ -23,6 +23,8 @@ function App({ config }: AppProps) {
   const [stats, setStats] = useState<RoomsStats>({ activeRooms: 0, totalPlayers: 0, activeGames: 0 });
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [playerCountDraft, setPlayerCountDraft] = useState<number | null>(null);
+  const [roundsDraft, setRoundsDraft] = useState<number>(20);
 
   async function refreshRooms() {
     try {
@@ -36,9 +38,10 @@ function App({ config }: AppProps) {
     }
   }
 
-  async function handleCreateRoom() {
+  async function handleCreateRoom(expectedPlayers: number, maxRounds: number) {
+    setPlayerCountDraft(null);
     try {
-      const { code } = await createRoom();
+      const { code } = await createRoom(expectedPlayers, maxRounds);
       setShareCode(code);
       refreshRooms();
     } catch (err) {
@@ -118,12 +121,71 @@ function App({ config }: AppProps) {
       <div className="flex gap-2 mb-3">
         <button
           type="button"
-          onClick={handleCreateRoom}
+          onClick={() => setPlayerCountDraft(2)}
           className="px-3 py-1.5 rounded bg-slate-900 text-white text-xs font-medium transition-colors hover:bg-slate-700"
         >
           + Create Instance
         </button>
       </div>
+
+      {playerCountDraft !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xs">
+            <h2 className="text-base font-semibold text-slate-900 mb-4">How many players?</h2>
+            <div className="flex items-center justify-center gap-4 mb-6">
+              <button
+                type="button"
+                onClick={() => setPlayerCountDraft((n) => Math.max(2, (n ?? 2) - 1))}
+                className="h-10 w-10 rounded-full border border-slate-300 text-xl font-bold text-slate-700 hover:bg-slate-100"
+              >
+                −
+              </button>
+              <span className="text-3xl font-bold text-slate-900 w-8 text-center">{playerCountDraft}</span>
+              <button
+                type="button"
+                onClick={() => setPlayerCountDraft((n) => Math.min(6, (n ?? 2) + 1))}
+                className="h-10 w-10 rounded-full border border-slate-300 text-xl font-bold text-slate-700 hover:bg-slate-100"
+              >
+                +
+              </button>
+            </div>
+            <h3 className="text-sm font-medium text-slate-700 mb-2 mt-4">Rounds (turns)</h3>
+            <div className="flex items-center justify-center gap-4 mb-6">
+              <button
+                type="button"
+                onClick={() => setRoundsDraft((n) => Math.max(5, n - 1))}
+                className="h-10 w-10 rounded-full border border-slate-300 text-xl font-bold text-slate-700 hover:bg-slate-100"
+              >
+                −
+              </button>
+              <span className="text-3xl font-bold text-slate-900 w-12 text-center">{roundsDraft}</span>
+              <button
+                type="button"
+                onClick={() => setRoundsDraft((n) => Math.min(50, n + 1))}
+                className="h-10 w-10 rounded-full border border-slate-300 text-xl font-bold text-slate-700 hover:bg-slate-100"
+              >
+                +
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPlayerCountDraft(null)}
+                className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCreateRoom(playerCountDraft, roundsDraft)}
+                className="flex-1 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {rooms.length === 0 && (
         <p className="text-sm text-slate-500 italic">

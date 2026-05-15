@@ -76,7 +76,8 @@ type PlayerState struct {
 }
 
 type CurrentTurn struct {
-	PlayerID string `json:"playerId"`
+	PlayerID   string `json:"playerId"`
+	DeadlineMs int64  `json:"deadlineMs,omitempty"`
 }
 
 type YouState struct {
@@ -86,15 +87,18 @@ type YouState struct {
 type ResourceBank map[ResourceType]int
 
 type GameState struct {
-	Phase               Phase
-	Board               *Board
-	Players             []*PlayerState
-	Current             *CurrentTurn
-	Civilizations       []Civilization
-	PickedCivs          map[string]string
-	UsedActionsThisTurn map[string]int
-	PendingDiplomacy    []DiplomacyOffer
-	WinnerID            string
+	Phase                 Phase
+	Board                 *Board
+	Players               []*PlayerState
+	Current               *CurrentTurn
+	Civilizations         []Civilization
+	PickedCivs            map[string]string
+	UsedActionsThisTurn   map[string]int
+	MaxRounds             int             `json:"maxRounds"`
+	RoundNumber           int             `json:"roundNumber"`
+	PlayersActedThisRound map[string]bool `json:"-"`
+	PendingDiplomacy      []DiplomacyOffer
+	WinnerID              string
 }
 
 func (g *GameState) tile(q, r int) *Tile {

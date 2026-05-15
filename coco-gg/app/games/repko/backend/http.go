@@ -15,7 +15,22 @@ func createRoomHandler(mgr *Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("http: %s %s", r.Method, r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		code, err := mgr.CreateRoom()
+		var body struct {
+			ExpectedPlayers int `json:"expectedPlayers"`
+			MaxRounds       int `json:"maxRounds"`
+		}
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		expected := body.ExpectedPlayers
+		if expected < 2 || expected > maxPlayers {
+			expected = 0
+		}
+		maxRounds := body.MaxRounds
+		if maxRounds < 1 || maxRounds > 100 {
+			maxRounds = 0
+		}
+		code, err := mgr.CreateRoom(expected, maxRounds)
 		if errors.Is(err, ErrCodeExhausted) {
 			log.Printf("http: %s %s -> %d (err=%s)", r.Method, r.URL.Path, http.StatusServiceUnavailable, "no codes available")
 			w.WriteHeader(http.StatusServiceUnavailable)

@@ -54,14 +54,14 @@ func NewManager() *Manager {
 	return &Manager{rooms: make(map[string]*Room)}
 }
 
-func (m *Manager) CreateRoom() (string, error) {
+func (m *Manager) CreateRoom(expectedPlayers, maxRounds int) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i := 0; i < maxCodeAttempts; i++ {
 		c := NewCode()
 		if _, exists := m.rooms[c]; !exists {
-			m.rooms[c] = NewRoom(c)
-			log.Printf("game: room created (code=%s)", c)
+			m.rooms[c] = NewRoom(c, expectedPlayers, maxRounds)
+			log.Printf("game: room created (code=%s expectedPlayers=%d maxRounds=%d)", c, expectedPlayers, maxRounds)
 			return c, nil
 		}
 	}

@@ -57,6 +57,8 @@ type State struct {
 	Civilizations    []Civilization   `json:"civilizations,omitempty"`
 	PendingDiplomacy []DiplomacyOffer `json:"pendingDiplomacy,omitempty"`
 	WinnerID         string           `json:"winnerId,omitempty"`
+	MaxRounds        int              `json:"maxRounds,omitempty"`
+	RoundNumber      int              `json:"roundNumber,omitempty"`
 	You              *YouState        `json:"you,omitempty"`
 }
 

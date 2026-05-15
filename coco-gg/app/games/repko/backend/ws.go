@@ -175,6 +175,13 @@ func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Printf("ws: welcome sent (remote=%s player_id=%s room=%s)", r.RemoteAddr, player.ID, room.Code)
 
 		room.Broadcast()
+		if room.ShouldAutoStart() {
+			log.Printf("game: auto-starting room=%s (expected players reached)", room.Code)
+			_ = room.StartGame()
+			room.mu.Lock()
+			room.armTurnTimerLocked()
+			room.mu.Unlock()
+		}
 	}
 
 	writerDone := make(chan struct{})
@@ -327,6 +334,9 @@ func (h *wsHandler) dispatch(room *Room, player *Player, action any) {
 	}
 	err := ValidateAndApply(state, player.ID, action)
 	phase := state.Phase
+	if err == nil {
+		room.armTurnTimerLocked()
+	}
 	room.mu.Unlock()
 	if err != nil {
 		log.Printf("game: repko action rejected (room=%s player_id=%s action=%s phase=%s reason=%v)", room.Code, player.ID, actionType, phase, err)

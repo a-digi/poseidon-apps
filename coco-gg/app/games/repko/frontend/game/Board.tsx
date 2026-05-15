@@ -671,7 +671,7 @@ export function Board({
                   textAnchor="middle"
                   fill="#ffffff"
                   style={{
-                    fontSize: Math.max(9, Math.round(11 * Math.min(zoom, 2))),
+                    fontSize: Math.max(6, Math.round(10 / Math.max(zoom, 0.5))),
                     fontWeight: 700,
                     paintOrder: 'stroke',
                     stroke: '#0f172a',

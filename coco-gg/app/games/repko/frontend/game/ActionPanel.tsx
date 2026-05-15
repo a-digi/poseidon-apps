@@ -398,6 +398,22 @@ function Stepper({ value, min, max, onChange }: Stepper) {
       >
         +
       </button>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(max, value + 5))}
+        disabled={value >= max}
+        className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 hover:bg-slate-100"
+      >
+        +5
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(max, value + 10))}
+        disabled={value >= max}
+        className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 hover:bg-slate-100"
+      >
+        +10
+      </button>
     </div>
   );
 }
