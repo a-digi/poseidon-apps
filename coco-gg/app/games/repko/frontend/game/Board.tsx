@@ -247,6 +247,68 @@ interface RenderedTile {
   power: number;
 }
 
+interface ZoomToolbarProps {
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onReset: () => void;
+}
+
+function ZoomToolbar({ onZoomIn, onZoomOut, onReset }: ZoomToolbarProps) {
+  const [hidden, setHidden] = useState(false);
+
+  if (hidden) {
+    return (
+      <div className="absolute inset-y-0 right-0 flex items-center">
+        <button
+          type="button"
+          aria-label="Show zoom controls"
+          onClick={() => setHidden(false)}
+          className="flex h-10 w-8 items-center justify-center rounded-l-md bg-slate-800 text-white shadow-md hover:bg-slate-700"
+        >
+          ‹
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="absolute bottom-3 right-3 flex flex-col gap-1 rounded-md bg-slate-800 p-1 shadow-lg">
+      <button
+        type="button"
+        onClick={onZoomIn}
+        className="flex h-10 w-10 items-center justify-center rounded text-lg font-semibold text-white hover:bg-slate-700"
+        aria-label="Zoom in"
+      >
+        +
+      </button>
+      <button
+        type="button"
+        onClick={onZoomOut}
+        className="flex h-10 w-10 items-center justify-center rounded text-lg font-semibold text-white hover:bg-slate-700"
+        aria-label="Zoom out"
+      >
+        −
+      </button>
+      <button
+        type="button"
+        onClick={onReset}
+        className="flex h-10 w-10 items-center justify-center rounded text-lg font-semibold text-white hover:bg-slate-700"
+        aria-label="Reset zoom"
+      >
+        ⊙
+      </button>
+      <button
+        type="button"
+        onClick={() => setHidden(true)}
+        className="flex h-10 w-10 items-center justify-center rounded text-sm font-semibold text-slate-300 hover:bg-slate-700"
+        aria-label="Hide zoom controls"
+      >
+        ›
+      </button>
+    </div>
+  );
+}
+
 export function Board({
   state,
   myPlayerId,
@@ -750,32 +812,11 @@ export function Board({
           );
         })}
       </svg>
-      <div className="absolute bottom-3 right-3 flex flex-col gap-1 bg-white/90 rounded-md shadow p-1">
-        <button
-          type="button"
-          onClick={handleZoomIn}
-          className="h-10 w-10 flex items-center justify-center text-lg font-semibold text-slate-700 hover:bg-slate-100 rounded"
-          aria-label="Zoom in"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          onClick={handleZoomOut}
-          className="h-10 w-10 flex items-center justify-center text-lg font-semibold text-slate-700 hover:bg-slate-100 rounded"
-          aria-label="Zoom out"
-        >
-          −
-        </button>
-        <button
-          type="button"
-          onClick={handleZoomReset}
-          className="h-10 w-10 flex items-center justify-center text-lg font-semibold text-slate-700 hover:bg-slate-100 rounded"
-          aria-label="Reset zoom"
-        >
-          ⊙
-        </button>
-      </div>
+      <ZoomToolbar
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onReset={handleZoomReset}
+      />
     </div>
   );
 }

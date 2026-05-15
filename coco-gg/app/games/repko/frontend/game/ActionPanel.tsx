@@ -960,8 +960,6 @@ export function ActionPanel({
   onAttackSourceChange,
   onAction,
 }: ActionPanelProps) {
-  const [minimized, setMinimized] = useState(false);
-
   const currentPlayer = useMemo(
     () => state.players.find((p) => p.id === state.currentTurn?.playerId) ?? null,
     [state.players, state.currentTurn],
@@ -980,22 +978,6 @@ export function ActionPanel({
     return (
       <footer className="border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
         Tap a tile to begin.
-      </footer>
-    );
-  }
-
-  if (minimized) {
-    return (
-      <footer className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 py-2">
-        <span className="text-xs text-slate-500">Controls hidden</span>
-        <button
-          type="button"
-          aria-label="Show controls"
-          onClick={() => setMinimized(false)}
-          className="text-xs font-medium text-slate-600 hover:text-slate-900"
-        >
-          ↑ Show
-        </button>
       </footer>
     );
   }
@@ -1064,16 +1046,6 @@ export function ActionPanel({
 
   return (
     <footer className="border-t border-slate-200 bg-slate-50">
-      <div className="flex justify-end border-b border-slate-100 px-2 py-0.5">
-        <button
-          type="button"
-          aria-label="Minimize controls"
-          onClick={() => setMinimized(true)}
-          className="text-[10px] text-slate-400 hover:text-slate-600"
-        >
-          ↓ Hide
-        </button>
-      </div>
       {useInlineLayout ? (
         <div className="flex items-stretch border-b border-slate-200">
           <div className="min-w-0 flex-1">

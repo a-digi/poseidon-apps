@@ -29,6 +29,7 @@ function findTile(state: StateMsg, q: number, r: number): Tile | undefined {
 }
 
 export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps) {
+  const [panelHidden, setPanelHidden] = useState(false);
   const [selectedTile, setSelectedTile] = useState<{ q: number; r: number } | null>(null);
   const [subAction, setSubAction] = useState<SubAction>('inspect');
   const [selectedStackCounts, setSelectedStackCounts] = useState<Map<number, number>>(new Map());
@@ -331,37 +332,49 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
         />
       </main>
 
-      <div className="border-t border-slate-200 bg-white px-3 py-2">
-        <ResourcePanel
-          resources={state.you?.resources ?? {}}
-          armyBreakdown={(() => {
-            const breakdown = { infantry: 0, armor: 0, jet: 0 };
-            if (myPlayerId !== null) {
-              for (const tile of state.board?.tiles ?? []) {
-                if (tile.ownerId !== myPlayerId) continue;
-                for (const stack of tile.garrison) {
-                  breakdown[stack.type] += stack.count;
+      <div className="flex items-center gap-2 border-t border-slate-200 bg-white px-2 py-2">
+        <div className="min-w-0 flex-1 overflow-x-auto">
+          <ResourcePanel
+            resources={state.you?.resources ?? {}}
+            armyBreakdown={(() => {
+              const breakdown = { infantry: 0, armor: 0, jet: 0 };
+              if (myPlayerId !== null) {
+                for (const tile of state.board?.tiles ?? []) {
+                  if (tile.ownerId !== myPlayerId) continue;
+                  for (const stack of tile.garrison) {
+                    breakdown[stack.type] += stack.count;
+                  }
                 }
               }
-            }
-            return breakdown;
-          })()}
-        />
+              return breakdown;
+            })()}
+          />
+        </div>
+        <button
+          type="button"
+          aria-label={panelHidden ? 'Show controls' : 'Hide controls'}
+          onClick={() => setPanelHidden((h) => !h)}
+          className="shrink-0 rounded-md bg-slate-800 px-3 py-1.5 text-sm font-bold text-white hover:bg-slate-700 active:bg-slate-900"
+        >
+          {panelHidden ? '↑' : '↓'}
+        </button>
       </div>
 
-      <ActionPanel
-        state={state}
-        myPlayerId={myPlayerId}
-        isMyTurn={isMyTurn}
-        selectedTile={selectedTileObj}
-        subAction={subAction}
-        onSubActionChange={handleSubActionChange}
-        selectedStackCounts={selectedStackCounts}
-        onStackCountChange={handleStackCountChange}
-        attackSourceOverride={attackSourceOverride}
-        onAttackSourceChange={setAttackSourceOverride}
-        onAction={onAction}
-      />
+      {!panelHidden && (
+        <ActionPanel
+          state={state}
+          myPlayerId={myPlayerId}
+          isMyTurn={isMyTurn}
+          selectedTile={selectedTileObj}
+          subAction={subAction}
+          onSubActionChange={handleSubActionChange}
+          selectedStackCounts={selectedStackCounts}
+          onStackCountChange={handleStackCountChange}
+          attackSourceOverride={attackSourceOverride}
+          onAttackSourceChange={setAttackSourceOverride}
+          onAction={onAction}
+        />
+      )}
     </div>
   );
 }
