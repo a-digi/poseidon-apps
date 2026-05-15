@@ -550,7 +550,7 @@ export function Board({
         </defs>
         {rendered.map((r) => {
           const primaryYield = r.tile.yields?.[r.tile.production] ?? 0;
-          const yieldLabel = r.tile.production === 'none' || primaryYield === 0 ? '' : String(primaryYield);
+          void primaryYield;
           const k = tileKey(r.tile.q, r.tile.r);
           const showAttackRing =
             attackMode === true && r.isReachable && !r.isOwnedByMe;
@@ -681,18 +681,18 @@ export function Board({
                   {r.tile.name}
                 </text>
               )}
-              {yieldLabel !== '' && (
+              {r.tile.name !== undefined && r.tile.name !== '' && (
                 <text
                   x={r.cx}
                   y={r.cy + yieldFont / 3}
                   textAnchor="middle"
                   fill="#ffffff"
-                  style={{ fontSize: yieldFont, fontWeight: 700, paintOrder: 'stroke', stroke: '#1e293b', strokeWidth: 2 }}
+                  style={{ fontSize: Math.max(5, Math.round(7 / Math.max(zoom, 0.5))), fontWeight: 600, paintOrder: 'stroke', stroke: '#1e293b', strokeWidth: 1.5 }}
                 >
-                  {yieldLabel}
+                  {r.tile.name}
                 </text>
               )}
-              {showTier1 && r.units > 0 && (
+              {showTier1 && r.units > 0 && (r.isOwnedByMe || (r.isReachable && !r.isOwnedByMe)) && (
                 <g transform={`translate(${r.cx - HEX_SIZE * 0.55},${r.cy - HEX_SIZE * 0.95})`}>
                   <rect
                     x={0}

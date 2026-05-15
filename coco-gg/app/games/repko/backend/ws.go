@@ -269,6 +269,13 @@ readLoop:
 				continue
 			}
 			h.dispatch(room, player, ActionBuyTile{Q: m.Q, R: m.R})
+		case MsgUpgradeTile:
+			var m UpgradeTileMsg
+			if json.Unmarshal(raw, &m) != nil {
+				sendError(player, "invalid message")
+				continue
+			}
+			h.dispatch(room, player, ActionUpgradeTile{Q: m.Q, R: m.R})
 		case MsgOfferDiplomacy:
 			var m OfferDiplomacy
 			if json.Unmarshal(raw, &m) != nil {
@@ -363,6 +370,8 @@ func actionTypeName(action any) string {
 		return "attack"
 	case ActionBuyTile:
 		return "buy_tile"
+	case ActionUpgradeTile:
+		return "upgrade_tile"
 	case ActionOfferDiplomacy:
 		return "offer_diplomacy"
 	case ActionAcceptDiplomacy:

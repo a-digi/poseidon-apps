@@ -18,7 +18,8 @@ export type SubAction =
   | 'move'
   | 'attack'
   | 'diplomacy'
-  | 'buy';
+  | 'buy'
+  | 'upgrade_tile';
 
 const BASE_POWER: Record<UnitType, number> = { infantry: 1, cavalry: 2, artillery: 3 };
 
@@ -757,6 +758,7 @@ function ContextualActions({
   const isEnemy = !isMine && !isNeutral;
 
   if (isMine) {
+    const canUpgradeTile = tile.production !== 'none' && gold >= 10;
     return (
       <div className="flex flex-col gap-2">
         <ActionButton label="Recruit" onClick={() => onSubActionChange('recruit')} />
@@ -769,6 +771,11 @@ function ContextualActions({
             />
           </>
         )}
+        <ActionButton
+          label={`Upgrade Production — costs 10g${gold < 10 ? ` (need ${10 - gold} more)` : ''}`}
+          disabled={!canUpgradeTile}
+          onClick={() => onSubActionChange('upgrade_tile')}
+        />
       </div>
     );
   }
@@ -993,6 +1000,38 @@ export function ActionPanel({
                 type="button"
                 onClick={() => {
                   onAction({ type: 'buy_tile', q: selectedTile.q, r: selectedTile.r });
+                  resetToInspect();
+                }}
+                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                onClick={resetToInspect}
+                className="rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        {subAction === 'upgrade_tile' && (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-slate-700">
+              Upgrade production of{' '}
+              <span className="font-semibold">
+                {selectedTile.name !== undefined && selectedTile.name !== ''
+                  ? selectedTile.name
+                  : `(${selectedTile.q},${selectedTile.r})`}
+              </span>{' '}
+              for <span className="font-semibold">10 gold</span>.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onAction({ type: 'upgrade_tile', q: selectedTile.q, r: selectedTile.r });
                   resetToInspect();
                 }}
                 className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"

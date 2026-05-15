@@ -178,6 +178,12 @@ export interface CancelDiplomacy {
   r: number;
 }
 
+export interface UpgradeTile {
+  type: 'upgrade_tile';
+  q: number;
+  r: number;
+}
+
 export interface EndTurn {
   type: 'end_turn';
 }
@@ -198,5 +204,6 @@ export type ClientAction =
   | DeclineDiplomacy
   | CancelDiplomacy
   | BuyTile
+  | UpgradeTile
   | EndTurn
   | LeaveGame;

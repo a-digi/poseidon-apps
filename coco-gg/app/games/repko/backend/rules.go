@@ -62,6 +62,7 @@ type ActionAttack struct {
 	Units        []StackPick
 }
 type ActionBuyTile struct{ Q, R int }
+type ActionUpgradeTile struct{ Q, R int }
 type ActionOfferDiplomacy struct{ Q, R int }
 type ActionAcceptDiplomacy struct{ Q, R int }
 type ActionDeclineDiplomacy struct{ Q, R int }
@@ -120,6 +121,10 @@ func ValidateAndApply(state *GameState, playerID string, action any) error {
 			}
 		case ActionBuyTile:
 			if err := validateAndApplyBuyTile(state, playerID, a); err != nil {
+				return err
+			}
+		case ActionUpgradeTile:
+			if err := validateAndApplyUpgradeTile(state, playerID, a); err != nil {
 				return err
 			}
 		case ActionOfferDiplomacy:
@@ -454,6 +459,36 @@ func validateAndApplyBuyTile(state *GameState, playerID string, a ActionBuyTile)
 	tile.Garrison = []GarrisonStack{}
 	log.Printf("game: repko buy_tile (player=%s tile=(%d,%d) cost=%dg)",
 		playerID, a.Q, a.R, cost[ResourceGold])
+	advancePlayingTurn(state)
+	return nil
+}
+
+func validateAndApplyUpgradeTile(state *GameState, playerID string, a ActionUpgradeTile) error {
+	if state.Phase != PhasePlaying {
+		return ErrInvalidPhase
+	}
+	tile := state.tile(a.Q, a.R)
+	if tile == nil {
+		return ErrInvalidTile
+	}
+	if tile.OwnerID != playerID {
+		return ErrTileNotOwned
+	}
+	if tile.Production == ResourceNone {
+		return ErrInvalidTile
+	}
+	cost := ResourceBank{ResourceGold: 10}
+	player := state.playerByID(playerID)
+	if player == nil {
+		return ErrNotYourTurn
+	}
+	if !player.Resources.canAfford(cost) {
+		return ErrInsufficientResources
+	}
+	player.Resources.deduct(cost)
+	tile.Yields[tile.Production]++
+	log.Printf("game: repko upgrade_tile (player=%s tile=(%d,%d) production=%s yield=%d)",
+		playerID, a.Q, a.R, tile.Production, tile.Yields[tile.Production])
 	advancePlayingTurn(state)
 	return nil
 }

@@ -15,6 +15,7 @@ const (
 	MsgAcceptDiplomacy   MessageType = "accept_diplomacy"
 	MsgDeclineDiplomacy  MessageType = "decline_diplomacy"
 	MsgCancelDiplomacy   MessageType = "cancel_diplomacy"
+	MsgUpgradeTile       MessageType = "upgrade_tile"
 	MsgEndTurn           MessageType = "end_turn"
 	MsgLeaveGame         MessageType = "leave_game"
 
@@ -107,6 +108,12 @@ type Attack struct {
 }
 
 type BuyTile struct {
+	Type MessageType `json:"type"`
+	Q    int         `json:"q"`
+	R    int         `json:"r"`
+}
+
+type UpgradeTileMsg struct {
 	Type MessageType `json:"type"`
 	Q    int         `json:"q"`
 	R    int         `json:"r"`
