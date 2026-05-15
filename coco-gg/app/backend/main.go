@@ -10,6 +10,7 @@ import (
 	"coco-gg-plugin/deploy/local"
 	"coco-gg-plugin/deploy/remote"
 	"coco-gg-plugin/games/movement"
+	"coco-gg-plugin/games/repko"
 )
 
 func main() {
@@ -19,9 +20,9 @@ func main() {
 	var err error
 	switch os.Getenv("MODE") {
 	case "remote":
-		err = remote.Run(ctx, []remote.GameRegistrar{movement.Register})
+		err = remote.Run(ctx, []remote.GameRegistrar{movement.Register, repko.Register})
 	default:
-		err = local.Run(ctx, []local.GameRegistrar{movement.Register})
+		err = local.Run(ctx, []local.GameRegistrar{movement.Register, repko.Register})
 	}
 	if err != nil {
 		log.Fatalf("run: %v", err)

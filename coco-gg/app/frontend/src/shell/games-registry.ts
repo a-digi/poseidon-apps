@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import { MovementLogo } from '../games/movement/MovementLogo';
+import { RepkoLogo } from '../games/repko/RepkoLogo';
 
 export interface GameDescriptor {
   id: string;
@@ -19,5 +20,14 @@ export const GAMES: GameDescriptor[] = [
     Logo: MovementLogo,
     loadApp: () => import('../games/movement/App'),
     loadMobile: () => import('../games/movement/MobilePage'),
+  },
+  {
+    id: 'repko',
+    name: 'Repko',
+    description:
+      'A turn-based hex-board game of resource gathering and settlement, for 3-6 players.',
+    Logo: RepkoLogo,
+    loadApp: () => import('../games/repko/App'),
+    loadMobile: () => import('../games/repko/MobilePage'),
   },
 ];
