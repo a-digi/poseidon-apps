@@ -442,11 +442,7 @@ func validateAndApplyBuyTile(state *GameState, playerID string, a ActionBuyTile)
 	if !adjacent {
 		return ErrOutOfRange
 	}
-	total := 0
-	for _, y := range tile.Yields {
-		total += y
-	}
-	cost := ResourceBank{ResourceGold: total * 20}
+	cost := ResourceBank{ResourceGold: buyTileCost(tile)}
 	player := state.playerByID(playerID)
 	if player == nil {
 		return ErrNotYourTurn
@@ -623,6 +619,26 @@ func diplomacyCost(defender []GarrisonStack) ResourceBank {
 	return ResourceBank{ResourceGold: totalPower(defender) * 2}
 }
 
+const (
+	buyTileMin = 3
+	buyTileMax = 15
+)
+
+func buyTileCost(tile *Tile) int {
+	total := 0
+	for _, y := range tile.Yields {
+		total += y
+	}
+	cost := total * 3
+	if cost < buyTileMin {
+		cost = buyTileMin
+	}
+	if cost > buyTileMax {
+		cost = buyTileMax
+	}
+	return cost
+}
+
 func unitCost(t UnitType) ResourceBank {
 	switch t {
 	case UnitInfantry:
@@ -775,7 +791,7 @@ func chooseRetreatDestination(state *GameState, defenderID string, from Hex) (He
 
 func advanceCivPick(state *GameState) {
 	for _, p := range state.Players {
-		if p.Disconnected {
+		if p.Disconnected || p.LeftGame {
 			continue
 		}
 		if p.CivilizationID == "" {
@@ -784,7 +800,7 @@ func advanceCivPick(state *GameState) {
 	}
 	state.Phase = PhaseTilePick
 	for _, p := range state.Players {
-		if p.Disconnected {
+		if p.Disconnected || p.LeftGame {
 			continue
 		}
 		state.Current = &CurrentTurn{PlayerID: p.ID}
@@ -797,7 +813,7 @@ func advanceCivPick(state *GameState) {
 func advanceTilePick(state *GameState) {
 	tileCounts := state.tileCountByPlayer()
 	for _, p := range state.Players {
-		if p.Disconnected {
+		if p.Disconnected || p.LeftGame {
 			continue
 		}
 		if tileCounts[p.ID] == 0 {
@@ -809,7 +825,7 @@ func advanceTilePick(state *GameState) {
 	state.RoundNumber = 1
 	state.PlayersActedThisRound = map[string]bool{}
 	for _, p := range state.Players {
-		if p.Disconnected {
+		if p.Disconnected || p.LeftGame {
 			continue
 		}
 		state.Current = &CurrentTurn{PlayerID: p.ID}
@@ -850,7 +866,7 @@ func advancePlayingTurn(state *GameState) {
 
 	allActed := true
 	for _, p := range state.Players {
-		if p.Disconnected || p.Eliminated {
+		if p.Disconnected || p.Eliminated || p.LeftGame {
 			continue
 		}
 		if !state.PlayersActedThisRound[p.ID] {
@@ -879,7 +895,7 @@ func advancePlayingTurn(state *GameState) {
 	for i := 1; i <= n; i++ {
 		candidate := (currentIdx + i) % n
 		p := state.Players[candidate]
-		if p.Eliminated || p.Disconnected {
+		if p.Eliminated || p.Disconnected || p.LeftGame {
 			continue
 		}
 		next = candidate
@@ -905,10 +921,10 @@ func cleanupStaleDiplomacy(state *GameState) {
 	for _, offer := range state.PendingDiplomacy {
 		attacker := state.playerByID(offer.AttackerID)
 		defender := state.playerByID(offer.DefenderID)
-		if attacker == nil || attacker.Disconnected || attacker.Eliminated {
+		if attacker == nil || attacker.Disconnected || attacker.Eliminated || attacker.LeftGame {
 			continue
 		}
-		if defender == nil || defender.Disconnected || defender.Eliminated {
+		if defender == nil || defender.Disconnected || defender.Eliminated || defender.LeftGame {
 			continue
 		}
 		tile := state.tile(offer.Q, offer.R)
@@ -959,6 +975,42 @@ func checkAndApplyWin(state *GameState) {
 		state.WinnerID = winner.ID
 		state.Current = nil
 		log.Printf("game: repko phase advance (phase=game_over winner=%s)", winner.ID)
+	}
+}
+
+func releasePlayerTiles(state *GameState, playerID string) {
+	if state.Board == nil {
+		return
+	}
+	for _, t := range state.Board.Tiles {
+		if t.OwnerID == playerID {
+			t.OwnerID = ""
+			t.Garrison = []GarrisonStack{}
+		}
+	}
+}
+
+func endGameIfOnlyOneActive(state *GameState) {
+	if state.Phase == PhaseGameOver {
+		return
+	}
+	active := 0
+	var lastActive string
+	for _, p := range state.Players {
+		if p.LeftGame || p.Eliminated {
+			continue
+		}
+		active++
+		lastActive = p.ID
+	}
+	if active <= 1 {
+		state.Phase = PhaseGameOver
+		if active == 1 {
+			state.WinnerID = lastActive
+		} else {
+			state.WinnerID = ""
+		}
+		state.Current = nil
 	}
 }
 

@@ -218,6 +218,51 @@ func (r *Room) Kick(playerID, reason string) bool {
 	return true
 }
 
+// LeaveGame voluntarily removes a player: marks LeftGame, releases their tiles
+// to neutral, invalidates their resume token, advances the turn if it was
+// theirs, ends the game if <= 1 active player remains, and broadcasts.
+func (r *Room) LeaveGame(playerID string) {
+	r.mu.Lock()
+	if r.closed || r.state == nil {
+		r.mu.Unlock()
+		return
+	}
+	ps := r.state.playerByID(playerID)
+	if ps == nil {
+		r.mu.Unlock()
+		return
+	}
+	releasePlayerTiles(r.state, playerID)
+	ps.LeftGame = true
+	ps.Disconnected = true
+
+	if t, ok := r.playerIDToResumeToken[playerID]; ok {
+		delete(r.resumeTokens, t)
+		delete(r.playerIDToResumeToken, playerID)
+	}
+
+	cleanupStaleDiplomacy(r.state)
+
+	wasCurrent := r.state.Current != nil && r.state.Current.PlayerID == playerID
+	if wasCurrent && r.state.Phase == PhasePlaying {
+		advancePlayingTurn(r.state)
+	}
+
+	endGameIfOnlyOneActive(r.state)
+
+	if r.state.Phase == PhaseGameOver && r.turnTimer != nil {
+		r.turnTimer.Stop()
+		r.turnTimer = nil
+	}
+
+	recomputeCounters(r.state)
+	r.armTurnTimerLocked()
+	r.mu.Unlock()
+
+	log.Printf("game: repko leave_game (room=%s player_id=%s)", r.Code, playerID)
+	r.Broadcast()
+}
+
 func (r *Room) playerByIDLocked(playerID string) *Player {
 	for _, p := range r.players {
 		if p.ID == playerID {

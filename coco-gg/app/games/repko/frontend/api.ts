@@ -71,6 +71,17 @@ export async function kickPlayer(code: string, playerId: string): Promise<void> 
   if (!r.ok && r.status !== 404) throw new Error(`kickPlayer: ${r.statusText}`);
 }
 
+export async function leaveRoom(code: string, resumeToken: string): Promise<void> {
+  const r = await fetch(`${base}/rooms/${encodeURIComponent(code)}/leave`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ resumeToken }),
+  });
+  if (!r.ok && r.status !== 404) {
+    throw new Error(`leaveRoom: ${r.statusText}`);
+  }
+}
+
 export async function startGame(code: string): Promise<void> {
   const r = await fetch(`${base}/rooms/${encodeURIComponent(code)}/start`, {
     method: 'POST',

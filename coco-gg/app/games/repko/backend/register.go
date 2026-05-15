@@ -13,6 +13,7 @@ func Register(ctx context.Context, r runtime.Router) gamemeta.Info {
 
 	wsh := newWSHandler(mgr)
 	r.Public("GET /ws/games/repko", wsh)
+	r.Public("POST /api/games/repko/rooms/{code}/leave", leaveRoomHandler(mgr))
 
 	r.Admin("POST /api/games/repko/rooms", createRoomHandler(mgr))
 	r.Admin("GET /api/games/repko/rooms", listRoomsHandler(mgr))

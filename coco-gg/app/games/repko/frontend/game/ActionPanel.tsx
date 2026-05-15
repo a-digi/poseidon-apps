@@ -9,7 +9,7 @@ import type {
   Tile,
   UnitType,
 } from '../types';
-import { hexDistance, reachableForAction } from './coords';
+import { hexDistance } from './coords';
 
 export type SubAction =
   | 'inspect'
@@ -96,6 +96,14 @@ function diplomacyGoldCost(defenderGarrison: GarrisonStack[]): number {
   return totalPower(defenderGarrison) * 2;
 }
 
+function buyTileCost(tile: Tile): number {
+  const total = productiveYields(tile.yields).reduce((s, y) => s + y.amount, 0);
+  const cost = total * 3;
+  if (cost < 3) return 3;
+  if (cost > 15) return 15;
+  return cost;
+}
+
 interface ButtonState {
   label: string;
   disabled: boolean;
@@ -136,8 +144,7 @@ function describeAttack(
 }
 
 function describeBuy(tile: Tile, sources: Tile[], gold: number): ButtonState {
-  const total = productiveYields(tile.yields).reduce((s, y) => s + y.amount, 0);
-  const cost = total * 20;
+  const cost = buyTileCost(tile);
   if (sources.length === 0) {
     return {
       label: 'Buy this tile — out of range (need an adjacent friendly tile)',
@@ -216,16 +223,21 @@ function closestOwnedDistance(
   return best === Number.POSITIVE_INFINITY ? null : best;
 }
 
-function reachableSources(state: StateMsg, myPlayerId: string, target: Tile): Tile[] {
-  const tiles = state.board?.tiles ?? [];
-  const owned = tiles.filter((t) => t.ownerId === myPlayerId);
+function adjacentOwnedTiles(state: StateMsg, myPlayerId: string | null, target: Tile): Tile[] {
+  if (myPlayerId === null) return [];
   const out: Tile[] = [];
-  for (const src of owned) {
-    if (src.q === target.q && src.r === target.r) continue;
-    const reach = reachableForAction(state, myPlayerId, { q: src.q, r: src.r });
-    if (reach.some((h) => h.q === target.q && h.r === target.r)) out.push(src);
+  for (const t of state.board?.tiles ?? []) {
+    if (t.ownerId !== myPlayerId) continue;
+    if (t.q === target.q && t.r === target.r) continue;
+    if (hexDistance({ q: t.q, r: t.r }, { q: target.q, r: target.r }) === 1) {
+      out.push(t);
+    }
   }
   return out;
+}
+
+function reachableSources(state: StateMsg, myPlayerId: string, target: Tile): Tile[] {
+  return adjacentOwnedTiles(state, myPlayerId, target);
 }
 
 function sortSourcesByPreference(sources: Tile[]): Tile[] {
@@ -256,6 +268,7 @@ interface InfoCardProps {
   state: StateMsg;
   myPlayerId: string | null;
   tile: Tile;
+  noBorder?: boolean;
 }
 
 function rangeBadge(distance: number | null): { label: string; cls: string } {
@@ -265,9 +278,27 @@ function rangeBadge(distance: number | null): { label: string; cls: string } {
   return { label: 'Out of range', cls: 'bg-slate-200 text-slate-600' };
 }
 
-function TileInfoCard({ state, myPlayerId, tile }: InfoCardProps) {
+function TileInfoCard({ state, myPlayerId, tile, noBorder }: InfoCardProps) {
+  const ownedSnapshot = (state.board?.tiles ?? [])
+    .filter((t) => t.ownerId === myPlayerId)
+    .map((t) => ({
+      q: t.q,
+      r: t.r,
+      name: t.name,
+      dist: hexDistance({ q: t.q, r: t.r }, { q: tile.q, r: tile.r }),
+    }));
+  const distances = ownedSnapshot.map((t) => t.dist);
+  console.info('[repko/TileInfoCard] inspect', {
+    myPlayerId,
+    tile: { q: tile.q, r: tile.r, name: tile.name, ownerId: tile.ownerId },
+    ownedCount: ownedSnapshot.length,
+    owned: ownedSnapshot,
+    closest: distances.length > 0 ? Math.min(...distances) : null,
+    adjacentSources: adjacentOwnedTiles(state, myPlayerId, tile).map((s) => ({ q: s.q, r: s.r })),
+  });
   const isMine = myPlayerId !== null && tile.ownerId === myPlayerId;
   const isNeutral = tile.ownerId === '';
+  const buyCost = isNeutral ? buyTileCost(tile) : 0;
   const ownerCiv = !isNeutral ? findOwnerCiv(state, tile.ownerId) : undefined;
   const distance = closestOwnedDistance(state, myPlayerId, tile);
   const badge = rangeBadge(distance);
@@ -303,7 +334,7 @@ function TileInfoCard({ state, myPlayerId, tile }: InfoCardProps) {
   const yieldEntries = productiveYields(tile.yields);
 
   return (
-    <div className="border-b border-slate-200 px-3 py-2 text-xs text-slate-700">
+    <div className={`${noBorder === true ? '' : 'border-b border-slate-200 '}px-3 py-2 text-xs text-slate-700`}>
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-baseline gap-2">
           <span className="text-sm font-semibold text-slate-900">
@@ -337,6 +368,12 @@ function TileInfoCard({ state, myPlayerId, tile }: InfoCardProps) {
           ))
         )}
       </div>
+      {isNeutral && (
+        <p className="mt-1 text-xs text-slate-700">
+          <span className="font-medium text-slate-800">Buy price:</span>{' '}
+          <span className="font-mono">{buyCost}g</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -368,6 +405,28 @@ function CancelButton({ onClick }: { onClick: () => void }) {
       className="self-start rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
     >
       Cancel
+    </button>
+  );
+}
+
+interface IconActionButtonProps {
+  icon: string;
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+}
+
+function IconActionButton({ icon, label, disabled, onClick }: IconActionButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+      className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-slate-900 text-2xl text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+    >
+      {icon}
     </button>
   );
 }
@@ -736,6 +795,23 @@ function DiplomacySubPanel({ target, gold, pending, onConfirm, onCancel }: Diplo
   );
 }
 
+interface IconActionCellProps {
+  icon: string;
+  label: string;
+  caption: string;
+  disabled?: boolean;
+  onClick: () => void;
+}
+
+function IconActionCell({ icon, label, caption, disabled, onClick }: IconActionCellProps) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <IconActionButton icon={icon} label={label} disabled={disabled} onClick={onClick} />
+      <span className="text-[10px] font-medium text-slate-700">{caption}</span>
+    </div>
+  );
+}
+
 interface ContextualActionsProps {
   state: StateMsg;
   myPlayerId: string;
@@ -753,6 +829,23 @@ function ContextualActions({
   onSubActionChange,
   onAttackSourceChange,
 }: ContextualActionsProps) {
+  const ownedSnapshot = (state.board?.tiles ?? [])
+    .filter((t) => t.ownerId === myPlayerId)
+    .map((t) => ({
+      q: t.q,
+      r: t.r,
+      name: t.name,
+      dist: hexDistance({ q: t.q, r: t.r }, { q: tile.q, r: tile.r }),
+    }));
+  const distances = ownedSnapshot.map((t) => t.dist);
+  console.info('[repko/ContextualActions] inspect', {
+    myPlayerId,
+    tile: { q: tile.q, r: tile.r, name: tile.name, ownerId: tile.ownerId },
+    ownedCount: ownedSnapshot.length,
+    owned: ownedSnapshot,
+    closest: distances.length > 0 ? Math.min(...distances) : null,
+    adjacentSources: adjacentOwnedTiles(state, myPlayerId, tile).map((s) => ({ q: s.q, r: s.r })),
+  });
   const isMine = tile.ownerId === myPlayerId;
   const isNeutral = tile.ownerId === '';
   const isEnemy = !isMine && !isNeutral;
@@ -787,10 +880,15 @@ function ContextualActions({
     const pending =
       state.pendingDiplomacy?.some((o) => o.q === tile.q && o.r === tile.r) ?? false;
     const dipBtn = describeDiplomacy(tile, sources, gold, pending);
+    const defenderUnits = totalUnits(tile.garrison);
+    const defenderPower = totalPower(tile.garrison);
+    const attackCaption = `🛡 ${defenderUnits}u / ${defenderPower}p`;
     return (
-      <div className="flex flex-col gap-2">
-        <ActionButton
+      <div className="flex flex-row gap-2">
+        <IconActionCell
+          icon="⚔️"
           label={attackBtn.label}
+          caption={attackCaption}
           disabled={attackBtn.disabled}
           onClick={() => {
             if (source !== null) {
@@ -799,8 +897,10 @@ function ContextualActions({
             onSubActionChange('attack');
           }}
         />
-        <ActionButton
+        <IconActionCell
+          icon="🤝"
           label={dipBtn.label}
+          caption={`${diplomacyGoldCost(tile.garrison)}G`}
           disabled={dipBtn.disabled}
           onClick={() => onSubActionChange('diplomacy')}
         />
@@ -811,10 +911,15 @@ function ContextualActions({
   if (isNeutral) {
     const { state: attackBtn, source } = describeAttack(tile, sources);
     const buyBtn = describeBuy(tile, sources, gold);
+    const defenderUnits = totalUnits(tile.garrison);
+    const defenderPower = totalPower(tile.garrison);
+    const attackCaption = `🛡 ${defenderUnits}u / ${defenderPower}p`;
     return (
-      <div className="flex flex-col gap-2">
-        <ActionButton
+      <div className="flex flex-row gap-2">
+        <IconActionCell
+          icon="⚔️"
           label={attackBtn.label}
+          caption={attackCaption}
           disabled={attackBtn.disabled}
           onClick={() => {
             if (source !== null) {
@@ -823,8 +928,10 @@ function ContextualActions({
             onSubActionChange('attack');
           }}
         />
-        <ActionButton
+        <IconActionCell
+          icon="💰"
           label={buyBtn.label}
+          caption={`${buyTileCost(tile)}G`}
           disabled={buyBtn.disabled}
           onClick={() => onSubActionChange('buy')}
         />
@@ -917,11 +1024,33 @@ export function ActionPanel({
     resetToInspect();
   };
 
+  const isNonOwnedInspect =
+    subAction === 'inspect' &&
+    selectedTile.ownerId !== myPlayerId;
+
   return (
     <footer className="border-t border-slate-200 bg-slate-50">
-      <TileInfoCard state={state} myPlayerId={myPlayerId} tile={selectedTile} />
+      {isNonOwnedInspect ? (
+        <div className="flex items-stretch border-b border-slate-200">
+          <div className="min-w-0 flex-1">
+            <TileInfoCard state={state} myPlayerId={myPlayerId} tile={selectedTile} noBorder />
+          </div>
+          <div className="flex shrink-0 items-center justify-center gap-2 border-l border-slate-200 px-2 py-2">
+            <ContextualActions
+              state={state}
+              myPlayerId={myPlayerId}
+              tile={selectedTile}
+              gold={gold}
+              onSubActionChange={onSubActionChange}
+              onAttackSourceChange={onAttackSourceChange}
+            />
+          </div>
+        </div>
+      ) : (
+        <TileInfoCard state={state} myPlayerId={myPlayerId} tile={selectedTile} />
+      )}
       <div className="flex flex-col gap-2 px-3 py-2">
-        {subAction === 'inspect' && (
+        {subAction === 'inspect' && !isNonOwnedInspect && (
           <ContextualActions
             state={state}
             myPlayerId={myPlayerId}
@@ -993,7 +1122,7 @@ export function ActionPanel({
                   ? selectedTile.name
                   : `(${selectedTile.q},${selectedTile.r})`}
               </span>{' '}
-              for {productiveYields(selectedTile.yields).reduce((s, y) => s + y.amount, 0) * 20} gold.
+              for {buyTileCost(selectedTile)} gold.
             </p>
             <div className="flex gap-2">
               <button

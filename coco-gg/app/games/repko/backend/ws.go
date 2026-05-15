@@ -307,7 +307,7 @@ readLoop:
 		case MsgEndTurn:
 			h.dispatch(room, player, ActionEndTurn{})
 		case MsgLeaveGame:
-			room.invalidateResumeToken(player.ID)
+			room.LeaveGame(player.ID)
 			log.Printf("game: repko player left (room=%s player_id=%s)", room.Code, player.ID)
 			break readLoop
 		default:

@@ -3,11 +3,12 @@ import { buildWsUrl } from '@shell/api';
 import { Connection } from './game/Connection';
 import { GameView } from './game/GameView';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { leaveRoom } from './api';
 import type { ClientAction, ErrorMsg, StateMsg } from './types';
 
 const MAX_NAME_LENGTH = 32;
 
-type Phase = 'name' | 'joining' | 'playing';
+type Phase = 'name' | 'joining' | 'playing' | 'disconnected';
 
 const resumeKey = (room: string) => `repko_resume_${room}`;
 
@@ -70,53 +71,45 @@ function MobilePage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (room === null || token === null || resume === null) return;
-    if (phaseRef.current !== 'name') return;
-    console.info('[repko/MobilePage] resume attempt', { room });
+  const tryResume = (roomCode: string, mobileToken: string, resume: string) => {
+    if (phaseRef.current === 'joining') return;
+    console.info('[repko/MobilePage] resume attempt', { room: roomCode });
     setPhase('joining');
-    const wsUrl = buildWsUrl(window.location.host, 'repko', room, token);
+    const wsUrl = buildWsUrl(window.location.host, 'repko', roomCode, mobileToken);
     const conn = new Connection(
       wsUrl,
       {
         onWelcome: (msg) => {
-          console.info('[repko/MobilePage] welcome (resume)', { playerId: msg.playerId });
-          try { window.localStorage.setItem(resumeKey(room), msg.resumeToken); } catch { /* ignore */ }
+          try { window.localStorage.setItem(resumeKey(roomCode), msg.resumeToken); } catch { /* ignore */ }
           clearJoinTimeout();
           setMyPlayerId(msg.playerId);
           setName(msg.you?.name ?? '');
           setPhase('playing');
+          console.info('[repko/MobilePage] welcome (resume)', { playerId: msg.playerId });
         },
         onState: (msg) => {
-          console.info('[repko/MobilePage] state', {
-            phase: msg.phase,
-            players: msg.players.length,
-            hasBoard: msg.board !== undefined,
-            hasYou: msg.you !== undefined,
-            currentTurn: msg.currentTurn ?? null,
-          });
+          console.info('[repko/MobilePage] state', { phase: msg.phase, players: msg.players.length });
           setState(msg);
         },
         onError: (msg) => {
           if (msg.message.startsWith('resume failed:')) {
             console.warn('[repko/MobilePage] resume failed', msg.message);
-            try { window.localStorage.removeItem(resumeKey(room)); } catch { /* ignore */ }
+            try { window.localStorage.removeItem(resumeKey(roomCode)); } catch { /* ignore */ }
             setResume(null);
             resetToName('Could not resume your previous session. Please rejoin.');
             return;
           }
-          console.warn('[repko/MobilePage] error', msg);
           handleError(msg);
         },
         onClose: () => {
-          console.warn('[repko/MobilePage] close (resume, phase=' + phaseRef.current + ')');
+          console.warn('[repko/MobilePage] close (phase=' + phaseRef.current + ')');
           handleClose();
         },
       },
       { disableAutoReconnect: true },
     );
     conn.connect();
-    conn.sendHelloResume(room, resume);
+    conn.sendHelloResume(roomCode, resume);
     joinTimeoutRef.current = window.setTimeout(() => {
       joinTimeoutRef.current = null;
       if (phaseRef.current === 'joining') {
@@ -126,6 +119,12 @@ function MobilePage() {
     }, 8000);
     connectionRef.current = conn;
     setConnection(conn);
+  };
+
+  useEffect(() => {
+    if (room === null || token === null || resume === null) return;
+    if (phaseRef.current !== 'name') return;
+    tryResume(room, token, resume);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room, token, resume]);
 
@@ -163,8 +162,39 @@ function MobilePage() {
       return;
     }
     if (phaseRef.current === 'playing') {
-      resetToName('Disconnected from the room.');
+      const stored = room !== null ? (() => {
+        try { return window.localStorage.getItem(resumeKey(room)); } catch { return null; }
+      })() : null;
+      if (room === null || token === null || stored === null) {
+        resetToName('Disconnected from the room.');
+        return;
+      }
+      setResume(stored);
+      setPhase('disconnected');
     }
+  };
+
+  const handleRejoin = () => {
+    if (room === null || token === null || resume === null) {
+      resetToName('Missing session data. Please rejoin manually.');
+      return;
+    }
+    tryResume(room, token, resume);
+  };
+
+  const handleLeaveFromDisconnect = async () => {
+    if (room === null || resume === null) {
+      resetToName('You left the room.');
+      return;
+    }
+    try {
+      await leaveRoom(room, resume);
+    } catch (err) {
+      console.warn('[repko/MobilePage] leaveRoom failed', err);
+    }
+    try { window.localStorage.removeItem(resumeKey(room)); } catch { /* ignore */ }
+    setResume(null);
+    resetToName('You left the room.');
   };
 
   const handleJoin = () => {
@@ -253,6 +283,36 @@ function MobilePage() {
             Open this page from the QR code on the desktop.
           </p>
         </main>
+      </div>
+    );
+  }
+
+  if (phase === 'disconnected') {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-6 bg-white px-6 text-slate-900">
+        <div className="flex flex-col items-center gap-2">
+          <span className="text-3xl">🔌</span>
+          <h1 className="text-xl font-semibold">Connection lost</h1>
+          <p className="text-sm text-center text-slate-600">
+            Your game is still active. Rejoin to continue, or leave to release your tiles.
+          </p>
+        </div>
+        <div className="flex w-full max-w-sm flex-col gap-3">
+          <button
+            type="button"
+            onClick={handleRejoin}
+            className="w-full rounded-md bg-slate-900 px-4 py-3 text-base font-medium text-white hover:bg-slate-700"
+          >
+            Rejoin
+          </button>
+          <button
+            type="button"
+            onClick={handleLeaveFromDisconnect}
+            className="w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100"
+          >
+            Leave
+          </button>
+        </div>
       </div>
     );
   }

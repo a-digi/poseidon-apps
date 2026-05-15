@@ -332,7 +332,10 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
       </main>
 
       <div className="border-t border-slate-200 bg-white px-3 py-2">
-        <ResourcePanel resources={state.you?.resources ?? {}} />
+        <ResourcePanel
+          resources={state.you?.resources ?? {}}
+          armyCount={state.players.find((p) => p.id === myPlayerId)?.unitCount ?? 0}
+        />
       </div>
 
       <ActionPanel

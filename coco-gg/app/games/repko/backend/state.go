@@ -71,6 +71,7 @@ type PlayerState struct {
 	TileCount      int          `json:"tileCount"`
 	UnitCount      int          `json:"unitCount"`
 	Eliminated     bool         `json:"eliminated"`
+	LeftGame       bool         `json:"leftGame"`
 	Resources      ResourceBank `json:"-"`
 	Disconnected   bool         `json:"-"`
 }

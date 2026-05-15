@@ -122,6 +122,52 @@ func kickPlayerHandler(mgr *Manager) http.HandlerFunc {
 	}
 }
 
+func leaveRoomHandler(mgr *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("http: %s %s", r.Method, r.URL.Path)
+		code := r.PathValue("code")
+		if !validCode.MatchString(code) {
+			log.Printf("http: %s %s -> %d (err=invalid_code)", r.Method, r.URL.Path, http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid code"})
+			return
+		}
+		var body struct {
+			ResumeToken string `json:"resumeToken"`
+		}
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		if body.ResumeToken == "" {
+			log.Printf("http: %s %s -> %d (err=missing_token)", r.Method, r.URL.Path, http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "resumeToken required"})
+			return
+		}
+		room, ok := mgr.GetRoom(code)
+		if !ok {
+			log.Printf("http: %s %s -> %d (err=unknown_room)", r.Method, r.URL.Path, http.StatusNotFound)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "unknown room"})
+			return
+		}
+		playerID, found := room.playerIDByResumeToken(body.ResumeToken)
+		if !found {
+			log.Printf("http: %s %s -> %d (err=token_unknown)", r.Method, r.URL.Path, http.StatusNotFound)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "token unknown"})
+			return
+		}
+		room.LeaveGame(playerID)
+		log.Printf("http: %s %s -> %d (code=%s player_id=%s)", r.Method, r.URL.Path, http.StatusNoContent, code, playerID)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func startGameHandler(mgr *Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("http: %s %s", r.Method, r.URL.Path)

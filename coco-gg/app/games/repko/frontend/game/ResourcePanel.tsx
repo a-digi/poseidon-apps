@@ -2,6 +2,7 @@ import type { ResourceType } from '../types';
 
 interface ResourcePanelProps {
   resources: Partial<Record<ResourceType, number>>;
+  armyCount: number;
 }
 
 interface VisibleResource {
@@ -16,7 +17,11 @@ const VISIBLE: ReadonlyArray<VisibleResource> = [
   { type: 'food', label: 'Food', color: '#80b918' },
 ];
 
-export function ResourcePanel({ resources }: ResourcePanelProps) {
+const ARMY_COLOR = '#7c3aed';
+
+export function ResourcePanel({ resources, armyCount }: ResourcePanelProps) {
+  const armyDimmed = armyCount === 0;
+  const armyOpacityCls = armyDimmed ? 'opacity-50' : 'opacity-100';
   return (
     <div className="flex items-center justify-center gap-2">
       {VISIBLE.map((r) => {
@@ -34,6 +39,13 @@ export function ResourcePanel({ resources }: ResourcePanelProps) {
           </div>
         );
       })}
+      <div
+        className={`flex flex-col items-center rounded-md text-white w-9 h-12 ${armyOpacityCls}`}
+        style={{ background: ARMY_COLOR }}
+      >
+        <span className="text-[10px] font-medium leading-tight pt-1">⚔</span>
+        <span className="text-lg font-bold leading-none mt-1">{armyCount}</span>
+      </div>
     </div>
   );
 }
