@@ -13,18 +13,18 @@ const (
 type ResourceType string
 
 const (
-	ResourceGold ResourceType = "gold"
-	ResourceIron ResourceType = "iron"
-	ResourceFood ResourceType = "food"
-	ResourceNone ResourceType = "none"
+	ResourceCredits ResourceType = "credits"
+	ResourceSteel   ResourceType = "steel"
+	ResourceFuel    ResourceType = "fuel"
+	ResourceNone    ResourceType = "none"
 )
 
 type UnitType string
 
 const (
-	UnitInfantry  UnitType = "infantry"
-	UnitCavalry   UnitType = "cavalry"
-	UnitArtillery UnitType = "artillery"
+	UnitInfantry UnitType = "infantry"
+	UnitArmor    UnitType = "armor"
+	UnitJet      UnitType = "jet"
 )
 
 type UnitLevel int
@@ -174,9 +174,9 @@ func (g *GameState) removeDiplomacy(q, r int) {
 
 func emptyResourceBank() ResourceBank {
 	return ResourceBank{
-		ResourceGold: 0,
-		ResourceIron: 0,
-		ResourceFood: 0,
+		ResourceCredits: 0,
+		ResourceSteel:   0,
+		ResourceFuel:    0,
 	}
 }
 

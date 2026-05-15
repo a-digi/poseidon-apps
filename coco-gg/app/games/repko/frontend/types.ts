@@ -1,8 +1,8 @@
 export type Phase = 'lobby' | 'civ_pick' | 'tile_pick' | 'playing' | 'game_over';
 
-export type ResourceType = 'gold' | 'iron' | 'food' | 'none';
+export type ResourceType = 'credits' | 'steel' | 'fuel' | 'none';
 
-export type UnitType = 'infantry' | 'cavalry' | 'artillery';
+export type UnitType = 'infantry' | 'armor' | 'jet';
 
 export type UnitLevel = 1 | 2 | 3;
 

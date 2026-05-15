@@ -189,15 +189,15 @@ func validateAndApplyPickStartingTile(state *GameState, playerID string, a Actio
 		tile.Name = civ.Name
 	}
 	tile.Yields = map[ResourceType]int{
-		ResourceGold: 5,
-		ResourceIron: 10,
-		ResourceFood: 10,
+		ResourceCredits: 5,
+		ResourceSteel:   10,
+		ResourceFuel:    10,
 	}
 	tile.Garrison = buildStartingGarrison(state, player.CivilizationID)
 	player.Resources.add(ResourceBank{
-		ResourceGold: 30,
-		ResourceIron: 5,
-		ResourceFood: 60,
+		ResourceCredits: 30,
+		ResourceSteel:   5,
+		ResourceFuel:    60,
 	})
 	advanceTilePick(state)
 	return nil
@@ -211,7 +211,7 @@ func buildStartingGarrison(state *GameState, civID string) []GarrisonStack {
 			break
 		}
 	}
-	order := []UnitType{UnitInfantry, UnitCavalry, UnitArtillery}
+	order := []UnitType{UnitInfantry, UnitArmor, UnitJet}
 	garrison := make([]GarrisonStack, 0, len(order))
 	for _, ut := range order {
 		count := loadout[ut]
@@ -442,7 +442,7 @@ func validateAndApplyBuyTile(state *GameState, playerID string, a ActionBuyTile)
 	if !adjacent {
 		return ErrOutOfRange
 	}
-	cost := ResourceBank{ResourceGold: buyTileCost(tile)}
+	cost := ResourceBank{ResourceCredits: buyTileCost(tile)}
 	player := state.playerByID(playerID)
 	if player == nil {
 		return ErrNotYourTurn
@@ -453,8 +453,8 @@ func validateAndApplyBuyTile(state *GameState, playerID string, a ActionBuyTile)
 	player.Resources.deduct(cost)
 	tile.OwnerID = playerID
 	tile.Garrison = []GarrisonStack{}
-	log.Printf("game: repko buy_tile (player=%s tile=(%d,%d) cost=%dg)",
-		playerID, a.Q, a.R, cost[ResourceGold])
+	log.Printf("game: repko buy_tile (player=%s tile=(%d,%d) cost=%dc)",
+		playerID, a.Q, a.R, cost[ResourceCredits])
 	advancePlayingTurn(state)
 	return nil
 }
@@ -473,7 +473,7 @@ func validateAndApplyUpgradeTile(state *GameState, playerID string, a ActionUpgr
 	if tile.Production == ResourceNone {
 		return ErrInvalidTile
 	}
-	cost := ResourceBank{ResourceGold: 10}
+	cost := ResourceBank{ResourceCredits: 10}
 	player := state.playerByID(playerID)
 	if player == nil {
 		return ErrNotYourTurn
@@ -529,7 +529,7 @@ func validateAndApplyOfferDiplomacy(state *GameState, playerID string, a ActionO
 		AttackerID: playerID,
 		DefenderID: tile.OwnerID,
 	})
-	log.Printf("game: repko diplomacy offer cost (player=%s gold=%d)", playerID, cost[ResourceGold])
+	log.Printf("game: repko diplomacy offer cost (player=%s credits=%d)", playerID, cost[ResourceCredits])
 	advancePlayingTurn(state)
 	return nil
 }
@@ -616,7 +616,7 @@ func validateAndApplyEndTurn(state *GameState, playerID string) error {
 }
 
 func diplomacyCost(defender []GarrisonStack) ResourceBank {
-	return ResourceBank{ResourceGold: totalPower(defender) * 2}
+	return ResourceBank{ResourceCredits: totalPower(defender) * 2}
 }
 
 const (
@@ -642,11 +642,11 @@ func buyTileCost(tile *Tile) int {
 func unitCost(t UnitType) ResourceBank {
 	switch t {
 	case UnitInfantry:
-		return ResourceBank{ResourceGold: 5, ResourceIron: 1, ResourceFood: 0}
-	case UnitCavalry:
-		return ResourceBank{ResourceGold: 10, ResourceIron: 2, ResourceFood: 0}
-	case UnitArtillery:
-		return ResourceBank{ResourceGold: 20, ResourceIron: 3, ResourceFood: 0}
+		return ResourceBank{ResourceCredits: 5, ResourceSteel: 1, ResourceFuel: 0}
+	case UnitArmor:
+		return ResourceBank{ResourceCredits: 10, ResourceSteel: 2, ResourceFuel: 0}
+	case UnitJet:
+		return ResourceBank{ResourceCredits: 20, ResourceSteel: 3, ResourceFuel: 0}
 	}
 	return emptyResourceBank()
 }
@@ -669,7 +669,7 @@ func scaleCost(cost ResourceBank, n int) ResourceBank {
 }
 
 func isValidUnitType(t UnitType) bool {
-	return t == UnitInfantry || t == UnitCavalry || t == UnitArtillery
+	return t == UnitInfantry || t == UnitArmor || t == UnitJet
 }
 
 func civilizationExists(state *GameState, civID string) bool {
@@ -1045,19 +1045,19 @@ func applyTurnIncome(state *GameState, playerID string) {
 	player.Resources.add(income)
 
 	upkeep := sumUnits(owned)
-	player.Resources[ResourceFood] -= upkeep
+	player.Resources[ResourceFuel] -= upkeep
 
-	for player.Resources[ResourceFood] < 0 {
+	for player.Resources[ResourceFuel] < 0 {
 		if !destroyLowestPowerUnit(owned) {
 			break
 		}
-		player.Resources[ResourceFood]++
+		player.Resources[ResourceFuel]++
 	}
 	for _, t := range owned {
 		t.Garrison = filterNonEmpty(t.Garrison)
 	}
-	if player.Resources[ResourceFood] < 0 {
-		player.Resources[ResourceFood] = 0
+	if player.Resources[ResourceFuel] < 0 {
+		player.Resources[ResourceFuel] = 0
 	}
 }
 

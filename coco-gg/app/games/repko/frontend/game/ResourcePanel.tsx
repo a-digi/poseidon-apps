@@ -12,9 +12,9 @@ interface VisibleResource {
 }
 
 const VISIBLE: ReadonlyArray<VisibleResource> = [
-  { type: 'gold', label: 'Gold', color: '#d4a017' },
-  { type: 'iron', label: 'Iron', color: '#6c757d' },
-  { type: 'food', label: 'Food', color: '#80b918' },
+  { type: 'credits', label: '💵 Credits', color: '#d4a017' },
+  { type: 'steel', label: '⚒ Steel', color: '#6c757d' },
+  { type: 'fuel', label: '⛽ Fuel', color: '#80b918' },
 ];
 
 const ARMY_COLOR = '#7c3aed';

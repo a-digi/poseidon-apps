@@ -1,10 +1,10 @@
 package repko
 
-func loadout(infantry, cavalry, artillery int) map[UnitType]int {
+func loadout(infantry, armor, jet int) map[UnitType]int {
 	return map[UnitType]int{
-		UnitInfantry:  infantry,
-		UnitCavalry:   cavalry,
-		UnitArtillery: artillery,
+		UnitInfantry: infantry,
+		UnitArmor:    armor,
+		UnitJet:      jet,
 	}
 }
 

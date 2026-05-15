@@ -49,9 +49,9 @@ func shuffleProductions(rng *rand.Rand) []ResourceType {
 			out = append(out, rt)
 		}
 	}
-	add(ResourceGold, 8)
-	add(ResourceIron, 8)
-	add(ResourceFood, 8)
+	add(ResourceCredits, 8)
+	add(ResourceSteel, 8)
+	add(ResourceFuel, 8)
 	add(ResourceNone, 6)
 	rng.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
 	return out
@@ -107,19 +107,19 @@ func NewBoard(rng *rand.Rand) *Board {
 	var goldI, ironI, foodI, noneI int
 	pickName := func(p ResourceType) string {
 		switch p {
-		case ResourceGold:
+		case ResourceCredits:
 			if goldI < len(gold) {
 				n := gold[goldI]
 				goldI++
 				return n
 			}
-		case ResourceIron:
+		case ResourceSteel:
 			if ironI < len(iron) {
 				n := iron[ironI]
 				ironI++
 				return n
 			}
-		case ResourceFood:
+		case ResourceFuel:
 			if foodI < len(food) {
 				n := food[foodI]
 				foodI++
@@ -142,7 +142,7 @@ func NewBoard(rng *rand.Rand) *Board {
 		if prod != ResourceNone {
 			yields[prod] = 2 + rng.IntN(2)
 		}
-		for _, t := range []ResourceType{ResourceGold, ResourceIron, ResourceFood} {
+		for _, t := range []ResourceType{ResourceCredits, ResourceSteel, ResourceFuel} {
 			if _, exists := yields[t]; exists {
 				continue
 			}

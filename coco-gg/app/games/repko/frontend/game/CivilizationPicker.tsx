@@ -55,7 +55,7 @@ function CivTile({ civ, status, onPick }: CivTileProps) {
       </span>
       {loadout !== undefined && (
         <span className="text-[10px] text-slate-500">
-          ⚔ {loadout.infantry ?? 0}  🐎 {loadout.cavalry ?? 0}  💥 {loadout.artillery ?? 0}
+          🪖 {loadout.infantry ?? 0}  🚛 {loadout.armor ?? 0}  ✈️ {loadout.jet ?? 0}
         </span>
       )}
     </button>

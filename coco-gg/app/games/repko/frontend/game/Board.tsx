@@ -25,22 +25,22 @@ const TIER3 = 3.0;
 const DRAG_THRESHOLD_PX = 8;
 
 const PRODUCTION_GRADIENT: Record<ResourceType, string> = {
-  gold: 'url(#grad-gold)',
-  iron: 'url(#grad-iron)',
-  food: 'url(#grad-food)',
+  credits: 'url(#grad-credits)',
+  steel: 'url(#grad-steel)',
+  fuel: 'url(#grad-fuel)',
   none: 'url(#grad-none)',
 };
 void PRODUCTION_GRADIENT;
 
 const MOSAIC_BASE: Record<ResourceType, string> = {
-  gold: '#d4a017',
-  iron: '#64748b',
-  food: '#65a30d',
+  credits: '#d4a017',
+  steel: '#64748b',
+  fuel: '#65a30d',
   none: '#c2b280',
 };
 
 const MOSAIC_SHAPES: Record<ResourceType, ReactNode> = {
-  gold: (
+  credits: (
     <>
       <rect x="0.05" y="0.15" width="0.18" height="0.04" fill="#f5c842" />
       <rect x="0.55" y="0.25" width="0.22" height="0.04" fill="#f5c842" />
@@ -58,7 +58,7 @@ const MOSAIC_SHAPES: Record<ResourceType, ReactNode> = {
       <circle cx="0.65" cy="0.7" r="0.018" fill="#92400e" />
     </>
   ),
-  iron: (
+  steel: (
     <>
       <rect x="0.05" y="0.2" width="0.35" height="0.025" fill="#cbd5e1" />
       <rect x="0.4" y="0.65" width="0.35" height="0.025" fill="#cbd5e1" />
@@ -76,7 +76,7 @@ const MOSAIC_SHAPES: Record<ResourceType, ReactNode> = {
       <rect x="0.82" y="0.18" width="0.04" height="0.04" fill="#94a3b8" />
     </>
   ),
-  food: (
+  fuel: (
     <>
       <rect x="0.05" y="0.6" width="0.18" height="0.08" fill="#3f6212" />
       <rect x="0.55" y="0.18" width="0.22" height="0.06" fill="#3f6212" />
@@ -124,9 +124,9 @@ const spriteUrls = import.meta.glob<{ default: string }>(
 );
 
 const SPRITE_URL: Record<ResourceType, string | null> = {
-  gold: spriteUrls['../assets/tiles/gold.png']?.default ?? null,
-  iron: spriteUrls['../assets/tiles/iron.png']?.default ?? null,
-  food: spriteUrls['../assets/tiles/food.png']?.default ?? null,
+  credits: spriteUrls['../assets/tiles/credits.png']?.default ?? null,
+  steel: spriteUrls['../assets/tiles/steel.png']?.default ?? null,
+  fuel: spriteUrls['../assets/tiles/fuel.png']?.default ?? null,
   none: spriteUrls['../assets/tiles/none.png']?.default ?? null,
 };
 
@@ -171,22 +171,22 @@ function MosaicTile({ kind }: MosaicTileProps) {
 }
 
 const PRODUCTION_ICON: Record<ResourceType, string> = {
-  gold: '💰',
-  iron: '⚒',
-  food: '🍞',
+  credits: '💵',
+  steel: '⚒',
+  fuel: '⛽',
   none: '',
 };
 
 const BASE_POWER: Record<UnitType, number> = {
-  infantry: 1,
-  cavalry: 2,
-  artillery: 3,
+  infantry: 3,
+  armor: 4,
+  jet: 5,
 };
 
 const UNIT_ICON: Record<UnitType, string> = {
-  infantry: '🏹',
-  cavalry: '🐎',
-  artillery: '💥',
+  infantry: '🪖',
+  armor: '🚛',
+  jet: '✈️',
 };
 
 const NEUTRAL_STROKE = '#94a3b8';
@@ -514,17 +514,17 @@ export function Board({
         onDoubleClick={handleDoubleClick}
       >
         <defs>
-          <radialGradient id="grad-gold" cx="38%" cy="28%" r="75%">
+          <radialGradient id="grad-credits" cx="38%" cy="28%" r="75%">
             <stop offset="0%" stopColor="#fde68a" />
             <stop offset="52%" stopColor="#d4a017" />
             <stop offset="100%" stopColor="#78340f" />
           </radialGradient>
-          <radialGradient id="grad-iron" cx="38%" cy="28%" r="75%">
+          <radialGradient id="grad-steel" cx="38%" cy="28%" r="75%">
             <stop offset="0%" stopColor="#e2e8f0" />
             <stop offset="52%" stopColor="#64748b" />
             <stop offset="100%" stopColor="#1e293b" />
           </radialGradient>
-          <radialGradient id="grad-food" cx="38%" cy="28%" r="75%">
+          <radialGradient id="grad-fuel" cx="38%" cy="28%" r="75%">
             <stop offset="0%" stopColor="#d9f99d" />
             <stop offset="52%" stopColor="#65a30d" />
             <stop offset="100%" stopColor="#1a2e05" />
@@ -539,13 +539,13 @@ export function Board({
             <stop offset="45%" stopColor="#ffffff" stopOpacity="0.06" />
             <stop offset="100%" stopColor="#000000" stopOpacity="0.18" />
           </linearGradient>
-          <MosaicTile kind="gold" />
-          <MosaicTile kind="iron" />
-          <MosaicTile kind="food" />
+          <MosaicTile kind="credits" />
+          <MosaicTile kind="steel" />
+          <MosaicTile kind="fuel" />
           <MosaicTile kind="none" />
-          {SPRITE_URL.gold !== null && <SpritePattern production="gold" url={SPRITE_URL.gold} />}
-          {SPRITE_URL.iron !== null && <SpritePattern production="iron" url={SPRITE_URL.iron} />}
-          {SPRITE_URL.food !== null && <SpritePattern production="food" url={SPRITE_URL.food} />}
+          {SPRITE_URL.credits !== null && <SpritePattern production="credits" url={SPRITE_URL.credits} />}
+          {SPRITE_URL.steel !== null && <SpritePattern production="steel" url={SPRITE_URL.steel} />}
+          {SPRITE_URL.fuel !== null && <SpritePattern production="fuel" url={SPRITE_URL.fuel} />}
           {SPRITE_URL.none !== null && <SpritePattern production="none" url={SPRITE_URL.none} />}
         </defs>
         {rendered.map((r) => {

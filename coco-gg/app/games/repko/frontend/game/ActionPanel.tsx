@@ -21,42 +21,42 @@ export type SubAction =
   | 'buy'
   | 'upgrade_tile';
 
-const BASE_POWER: Record<UnitType, number> = { infantry: 1, cavalry: 2, artillery: 3 };
+const BASE_POWER: Record<UnitType, number> = { infantry: 3, armor: 4, jet: 5 };
 
-const UNIT_COSTS: Record<UnitType, { gold: number; iron: number; food: number }> = {
-  infantry: { gold: 5, iron: 1, food: 0 },
-  cavalry: { gold: 10, iron: 2, food: 0 },
-  artillery: { gold: 20, iron: 3, food: 0 },
+const UNIT_COSTS: Record<UnitType, { credits: number; steel: number; fuel: number }> = {
+  infantry: { credits: 5, steel: 1, fuel: 0 },
+  armor: { credits: 10, steel: 2, fuel: 0 },
+  jet: { credits: 20, steel: 3, fuel: 0 },
 };
 
 const UNIT_ICON: Record<UnitType, string> = {
-  infantry: '⚔',
-  cavalry: '🐎',
-  artillery: '💥',
+  infantry: '🪖',
+  armor: '🚛',
+  jet: '✈️',
 };
 
 const UNIT_NAME: Record<UnitType, string> = {
   infantry: 'Infantry',
-  cavalry: 'Cavalry',
-  artillery: 'Artillery',
+  armor: 'Tank',
+  jet: 'Jet',
 };
 
 const PROD_ICON: Record<string, string> = {
-  gold: '💰',
-  iron: '⚒',
-  food: '🍞',
+  credits: '💵',
+  steel: '⚒',
+  fuel: '⛽',
 };
 
 const PROD_NAME: Record<string, string> = {
-  gold: 'Gold',
-  iron: 'Iron',
-  food: 'Food',
+  credits: 'Credits',
+  steel: 'Steel',
+  fuel: 'Fuel',
 };
 
 const RESOURCE_ICON: Record<ResourceType, string> = {
-  gold: '💰',
-  iron: '⚒',
-  food: '🍞',
+  credits: '💵',
+  steel: '⚒',
+  fuel: '⛽',
   none: '',
 };
 
@@ -65,7 +65,7 @@ function productiveYields(
 ): { type: ResourceType; amount: number }[] {
   if (yields === undefined) return [];
   const out: { type: ResourceType; amount: number }[] = [];
-  for (const t of ['gold', 'iron', 'food'] as const) {
+  for (const t of ['credits', 'steel', 'fuel'] as const) {
     const a = yields[t] ?? 0;
     if (a > 0) out.push({ type: t, amount: a });
   }
@@ -143,7 +143,7 @@ function describeAttack(
   };
 }
 
-function describeBuy(tile: Tile, sources: Tile[], gold: number): ButtonState {
+function describeBuy(tile: Tile, sources: Tile[], credits: number): ButtonState {
   const cost = buyTileCost(tile);
   if (sources.length === 0) {
     return {
@@ -151,19 +151,19 @@ function describeBuy(tile: Tile, sources: Tile[], gold: number): ButtonState {
       disabled: true,
     };
   }
-  if (gold < cost) {
+  if (credits < cost) {
     return {
-      label: `Buy this tile — costs ${cost}g (need ${cost - gold} more)`,
+      label: `Buy this tile — costs ${cost}c (need ${cost - credits} more)`,
       disabled: true,
     };
   }
-  return { label: `Buy this tile — costs ${cost}g`, disabled: false };
+  return { label: `Buy this tile — costs ${cost}c`, disabled: false };
 }
 
 function describeDiplomacy(
   tile: Tile,
   sources: Tile[],
-  gold: number,
+  credits: number,
   pending: boolean,
 ): ButtonState {
   if (pending) {
@@ -176,25 +176,25 @@ function describeDiplomacy(
     };
   }
   const cost = diplomacyGoldCost(tile.garrison);
-  if (gold < cost) {
+  if (credits < cost) {
     return {
-      label: `Offer Diplomacy — costs ${cost}g (need ${cost - gold} more)`,
+      label: `Offer Diplomacy — costs ${cost}c (need ${cost - credits} more)`,
       disabled: true,
     };
   }
-  return { label: `Offer Diplomacy — costs ${cost}g`, disabled: false };
+  return { label: `Offer Diplomacy — costs ${cost}c`, disabled: false };
 }
 
-function recruitGoldIronCost(unit: UnitType, count: number): { gold: number; iron: number } {
+function recruitCreditSteelCost(unit: UnitType, count: number): { credits: number; steel: number } {
   const c = UNIT_COSTS[unit];
-  return { gold: c.gold * count, iron: c.iron * count };
+  return { credits: c.credits * count, steel: c.steel * count };
 }
 
-function upgradeGoldIronCost(stack: GarrisonStack): { gold: number; iron: number } | null {
+function upgradeCreditSteelCost(stack: GarrisonStack): { credits: number; steel: number } | null {
   if (stack.level >= 3) return null;
   const c = UNIT_COSTS[stack.type];
   const mult = stack.level === 1 ? 1 : 2;
-  return { gold: c.gold * mult, iron: c.iron * mult };
+  return { credits: c.credits * mult, steel: c.steel * mult };
 }
 
 function findTile(state: StateMsg, q: number, r: number): Tile | undefined {
@@ -371,7 +371,7 @@ function TileInfoCard({ state, myPlayerId, tile, noBorder }: InfoCardProps) {
       {isNeutral && (
         <p className="mt-1 text-xs text-slate-700">
           <span className="font-medium text-slate-800">Buy price:</span>{' '}
-          <span className="font-mono">{buyCost}g</span>
+          <span className="font-mono">{buyCost}c</span>
         </p>
       )}
     </div>
@@ -480,30 +480,30 @@ function Stepper({ value, min, max, onChange }: Stepper) {
 
 interface RecruitSubPanelProps {
   tile: Tile;
-  gold: number;
-  iron: number;
+  credits: number;
+  steel: number;
   onConfirm: (unit: UnitType, count: number) => void;
   onCancel: () => void;
 }
 
-function RecruitSubPanel({ tile, gold, iron, onConfirm, onCancel }: RecruitSubPanelProps) {
+function RecruitSubPanel({ tile, credits, steel, onConfirm, onCancel }: RecruitSubPanelProps) {
   const [counts, setCounts] = useState<Record<UnitType, number>>({
     infantry: 0,
-    cavalry: 0,
-    artillery: 0,
+    armor: 0,
+    jet: 0,
   });
   const setCount = (u: UnitType, next: number) =>
     setCounts((prev) => ({ ...prev, [u]: next }));
 
-  const units: UnitType[] = ['infantry', 'cavalry', 'artillery'];
+  const units: UnitType[] = ['infantry', 'armor', 'jet'];
 
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[10px] text-slate-500">Recruit on tile ({tile.q},{tile.r})</p>
       {units.map((u) => {
-        const cost = recruitGoldIronCost(u, counts[u]);
-        const unitCost = recruitGoldIronCost(u, 1);
-        const canConfirm = counts[u] > 0 && cost.gold <= gold && cost.iron <= iron;
+        const cost = recruitCreditSteelCost(u, counts[u]);
+        const unitCost = recruitCreditSteelCost(u, 1);
+        const canConfirm = counts[u] > 0 && cost.credits <= credits && cost.steel <= steel;
         return (
           <div
             key={u}
@@ -520,7 +520,7 @@ function RecruitSubPanel({ tile, gold, iron, onConfirm, onCancel }: RecruitSubPa
               onChange={(n) => setCount(u, n)}
             />
             <span className="w-20 text-right text-[10px] text-slate-500">
-              {unitCost.gold}g + {unitCost.iron}⚒
+              {unitCost.credits}c + {unitCost.steel}⚒
             </span>
             <button
               type="button"
@@ -543,13 +543,13 @@ function RecruitSubPanel({ tile, gold, iron, onConfirm, onCancel }: RecruitSubPa
 
 interface UpgradeSubPanelProps {
   tile: Tile;
-  gold: number;
-  iron: number;
+  credits: number;
+  steel: number;
   onUpgrade: (stackIndex: number) => void;
   onCancel: () => void;
 }
 
-function UpgradeSubPanel({ tile, gold, iron, onUpgrade, onCancel }: UpgradeSubPanelProps) {
+function UpgradeSubPanel({ tile, credits, steel, onUpgrade, onCancel }: UpgradeSubPanelProps) {
   if (tile.garrison.length === 0) {
     return (
       <div className="flex flex-col gap-2">
@@ -563,9 +563,9 @@ function UpgradeSubPanel({ tile, gold, iron, onUpgrade, onCancel }: UpgradeSubPa
       <p className="text-[10px] text-slate-500">Upgrade on tile ({tile.q},{tile.r})</p>
       <div className="flex flex-col gap-1">
         {tile.garrison.map((stack, idx) => {
-          const cost = upgradeGoldIronCost(stack);
+          const cost = upgradeCreditSteelCost(stack);
           const affordable =
-            cost !== null && cost.gold <= gold && cost.iron <= iron;
+            cost !== null && cost.credits <= credits && cost.steel <= steel;
           const disabled = cost === null || !affordable;
           return (
             <div
@@ -583,7 +583,7 @@ function UpgradeSubPanel({ tile, gold, iron, onUpgrade, onCancel }: UpgradeSubPa
                 disabled={disabled}
                 className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
               >
-                {cost === null ? 'MAX' : `Upgrade — ${cost.gold}g + ${cost.iron}⚒`}
+                {cost === null ? 'MAX' : `Upgrade — ${cost.credits}c + ${cost.steel}⚒`}
               </button>
             </div>
           );
@@ -766,20 +766,20 @@ function AttackSubPanel({
 
 interface DiplomacySubPanelProps {
   target: Tile;
-  gold: number;
+  credits: number;
   pending: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-function DiplomacySubPanel({ target, gold, pending, onConfirm, onCancel }: DiplomacySubPanelProps) {
+function DiplomacySubPanel({ target, credits, pending, onConfirm, onCancel }: DiplomacySubPanelProps) {
   const defenderPower = totalPower(target.garrison);
   const cost = diplomacyGoldCost(target.garrison);
-  const canConfirm = !pending && cost <= gold;
+  const canConfirm = !pending && cost <= credits;
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[10px] text-slate-700">
-        Defender power: {defenderPower} | Cost: {defenderPower} × 2 = {cost} gold
+        Defender power: {defenderPower} | Cost: {defenderPower} × 2 = {cost} credits
       </p>
       <p className="text-[10px] text-slate-500">
         Note: paid when the offer is made, not refunded if declined.
@@ -816,7 +816,7 @@ interface ContextualActionsProps {
   state: StateMsg;
   myPlayerId: string;
   tile: Tile;
-  gold: number;
+  credits: number;
   onSubActionChange: (next: SubAction) => void;
   onAttackSourceChange: (src: { q: number; r: number } | null) => void;
 }
@@ -825,7 +825,7 @@ function ContextualActions({
   state,
   myPlayerId,
   tile,
-  gold,
+  credits,
   onSubActionChange,
   onAttackSourceChange,
 }: ContextualActionsProps) {
@@ -851,7 +851,7 @@ function ContextualActions({
   const isEnemy = !isMine && !isNeutral;
 
   if (isMine) {
-    const canUpgradeTile = tile.production !== 'none' && gold >= 10;
+    const canUpgradeTile = tile.production !== 'none' && credits >= 10;
     return (
       <div className="flex flex-col gap-2">
         <ActionButton label="Recruit" onClick={() => onSubActionChange('recruit')} />
@@ -865,7 +865,7 @@ function ContextualActions({
           </>
         )}
         <ActionButton
-          label={`Upgrade Production — costs 10g${gold < 10 ? ` (need ${10 - gold} more)` : ''}`}
+          label={`Upgrade Production — costs 10c${credits < 10 ? ` (need ${10 - credits} more)` : ''}`}
           disabled={!canUpgradeTile}
           onClick={() => onSubActionChange('upgrade_tile')}
         />
@@ -879,7 +879,7 @@ function ContextualActions({
     const { state: attackBtn, source } = describeAttack(tile, sources);
     const pending =
       state.pendingDiplomacy?.some((o) => o.q === tile.q && o.r === tile.r) ?? false;
-    const dipBtn = describeDiplomacy(tile, sources, gold, pending);
+    const dipBtn = describeDiplomacy(tile, sources, credits, pending);
     const defenderUnits = totalUnits(tile.garrison);
     const defenderPower = totalPower(tile.garrison);
     const attackCaption = `🛡 ${defenderUnits}u / ${defenderPower}p`;
@@ -900,7 +900,7 @@ function ContextualActions({
         <IconActionCell
           icon="🤝"
           label={dipBtn.label}
-          caption={`${diplomacyGoldCost(tile.garrison)}G`}
+          caption={`${diplomacyGoldCost(tile.garrison)}C`}
           disabled={dipBtn.disabled}
           onClick={() => onSubActionChange('diplomacy')}
         />
@@ -910,7 +910,7 @@ function ContextualActions({
 
   if (isNeutral) {
     const { state: attackBtn, source } = describeAttack(tile, sources);
-    const buyBtn = describeBuy(tile, sources, gold);
+    const buyBtn = describeBuy(tile, sources, credits);
     const defenderUnits = totalUnits(tile.garrison);
     const defenderPower = totalPower(tile.garrison);
     const attackCaption = `🛡 ${defenderUnits}u / ${defenderPower}p`;
@@ -929,9 +929,9 @@ function ContextualActions({
           }}
         />
         <IconActionCell
-          icon="💰"
+          icon="💵"
           label={buyBtn.label}
-          caption={`${buyTileCost(tile)}G`}
+          caption={`${buyTileCost(tile)}C`}
           disabled={buyBtn.disabled}
           onClick={() => onSubActionChange('buy')}
         />
@@ -977,8 +977,8 @@ export function ActionPanel({
     );
   }
 
-  const gold = state.you?.resources?.gold ?? 0;
-  const iron = state.you?.resources?.iron ?? 0;
+  const credits = state.you?.resources?.credits ?? 0;
+  const steel = state.you?.resources?.steel ?? 0;
 
   const resetToInspect = () => onSubActionChange('inspect');
 
@@ -1040,7 +1040,7 @@ export function ActionPanel({
               state={state}
               myPlayerId={myPlayerId}
               tile={selectedTile}
-              gold={gold}
+              credits={credits}
               onSubActionChange={onSubActionChange}
               onAttackSourceChange={onAttackSourceChange}
             />
@@ -1055,7 +1055,7 @@ export function ActionPanel({
             state={state}
             myPlayerId={myPlayerId}
             tile={selectedTile}
-            gold={gold}
+            credits={credits}
             onSubActionChange={onSubActionChange}
             onAttackSourceChange={onAttackSourceChange}
           />
@@ -1063,8 +1063,8 @@ export function ActionPanel({
         {subAction === 'recruit' && (
           <RecruitSubPanel
             tile={selectedTile}
-            gold={gold}
-            iron={iron}
+            credits={credits}
+            steel={steel}
             onConfirm={handleRecruit}
             onCancel={resetToInspect}
           />
@@ -1072,8 +1072,8 @@ export function ActionPanel({
         {subAction === 'upgrade' && (
           <UpgradeSubPanel
             tile={selectedTile}
-            gold={gold}
-            iron={iron}
+            credits={credits}
+            steel={steel}
             onUpgrade={handleUpgrade}
             onCancel={resetToInspect}
           />
@@ -1107,7 +1107,7 @@ export function ActionPanel({
         {subAction === 'diplomacy' && (
           <DiplomacySubPanel
             target={selectedTile}
-            gold={gold}
+            credits={credits}
             pending={pendingOnThisTile}
             onConfirm={handleDiplomacyConfirm}
             onCancel={resetToInspect}
@@ -1122,7 +1122,7 @@ export function ActionPanel({
                   ? selectedTile.name
                   : `(${selectedTile.q},${selectedTile.r})`}
               </span>{' '}
-              for {buyTileCost(selectedTile)} gold.
+              for {buyTileCost(selectedTile)} credits.
             </p>
             <div className="flex gap-2">
               <button
@@ -1154,7 +1154,7 @@ export function ActionPanel({
                   ? selectedTile.name
                   : `(${selectedTile.q},${selectedTile.r})`}
               </span>{' '}
-              for <span className="font-semibold">10 gold</span>.
+              for <span className="font-semibold">10 credits</span>.
             </p>
             <div className="flex gap-2">
               <button

@@ -30,11 +30,11 @@ func stackPower(s GarrisonStack) int {
 func basePower(t UnitType) int {
 	switch t {
 	case UnitInfantry:
-		return 1
-	case UnitCavalry:
-		return 2
-	case UnitArtillery:
 		return 3
+	case UnitArmor:
+		return 4
+	case UnitJet:
+		return 5
 	}
 	return 0
 }
