@@ -327,6 +327,7 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
           selectedSource={boardSelectedSource}
           onTileClick={handlePlayingTileClick}
           attackMode={subAction === 'attack'}
+          inspectedTile={selectedTile}
         />
       </main>
 

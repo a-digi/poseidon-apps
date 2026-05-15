@@ -61,6 +61,7 @@ type ActionAttack struct {
 	ToQ, ToR     int
 	Units        []StackPick
 }
+type ActionBuyTile struct{ Q, R int }
 type ActionOfferDiplomacy struct{ Q, R int }
 type ActionAcceptDiplomacy struct{ Q, R int }
 type ActionDeclineDiplomacy struct{ Q, R int }
@@ -115,6 +116,10 @@ func ValidateAndApply(state *GameState, playerID string, action any) error {
 			}
 		case ActionAttack:
 			if err := validateAndApplyAttack(state, playerID, a); err != nil {
+				return err
+			}
+		case ActionBuyTile:
+			if err := validateAndApplyBuyTile(state, playerID, a); err != nil {
 				return err
 			}
 		case ActionOfferDiplomacy:
@@ -174,6 +179,15 @@ func validateAndApplyPickStartingTile(state *GameState, playerID string, a Actio
 	}
 	tile.OwnerID = playerID
 	tile.FoundedBy = playerID
+	civ := civilizationByID(state, player.CivilizationID)
+	if civ != nil {
+		tile.Name = civ.Name
+	}
+	tile.Yields = map[ResourceType]int{
+		ResourceGold: 5,
+		ResourceIron: 10,
+		ResourceFood: 10,
+	}
 	tile.Garrison = buildStartingGarrison(state, player.CivilizationID)
 	player.Resources.add(ResourceBank{
 		ResourceGold: 30,
@@ -362,15 +376,6 @@ func validateAndApplyAttack(state *GameState, playerID string, a ActionAttack) e
 	if err != nil {
 		return err
 	}
-	player := state.playerByID(playerID)
-	if player == nil {
-		return ErrNotYourTurn
-	}
-	cost := attackCost(picks, fromTile.Garrison)
-	if !player.Resources.canAfford(cost) {
-		return ErrInsufficientResources
-	}
-	player.Resources.deduct(cost)
 	defenderID := toTile.OwnerID
 	attackerForces := make([]GarrisonStack, 0, len(picks))
 	for _, p := range picks {
@@ -404,9 +409,51 @@ func validateAndApplyAttack(state *GameState, playerID string, a ActionAttack) e
 
 	log.Printf("game: repko combat (attacker=%s defender=%s from=(%d,%d) to=(%d,%d) result=%s survivors_power=%d)",
 		playerID, defenderID, from.Q, from.R, to.Q, to.R, outcome, totalPower(survivors))
-	log.Printf("game: repko attack cost (player=%s gold=%d)", playerID, cost[ResourceGold])
 
 	checkAndApplyWin(state)
+	advancePlayingTurn(state)
+	return nil
+}
+
+func validateAndApplyBuyTile(state *GameState, playerID string, a ActionBuyTile) error {
+	if state.Phase != PhasePlaying {
+		return ErrInvalidPhase
+	}
+	tile := state.tile(a.Q, a.R)
+	if tile == nil {
+		return ErrInvalidTile
+	}
+	if tile.OwnerID != "" {
+		return ErrTileNotNeutral
+	}
+	dest := Hex{Q: a.Q, R: a.R}
+	adjacent := false
+	for _, src := range state.ownedTiles(playerID) {
+		if cubeDistance(Hex{Q: src.Q, R: src.R}, dest) == 1 {
+			adjacent = true
+			break
+		}
+	}
+	if !adjacent {
+		return ErrOutOfRange
+	}
+	total := 0
+	for _, y := range tile.Yields {
+		total += y
+	}
+	cost := ResourceBank{ResourceGold: total * 20}
+	player := state.playerByID(playerID)
+	if player == nil {
+		return ErrNotYourTurn
+	}
+	if !player.Resources.canAfford(cost) {
+		return ErrInsufficientResources
+	}
+	player.Resources.deduct(cost)
+	tile.OwnerID = playerID
+	tile.Garrison = []GarrisonStack{}
+	log.Printf("game: repko buy_tile (player=%s tile=(%d,%d) cost=%dg)",
+		playerID, a.Q, a.R, cost[ResourceGold])
 	advancePlayingTurn(state)
 	return nil
 }
@@ -537,15 +584,6 @@ func validateAndApplyEndTurn(state *GameState, playerID string) error {
 	return nil
 }
 
-func attackCost(picks []StackPick, garrison []GarrisonStack) ResourceBank {
-	power := 0
-	for _, p := range picks {
-		s := garrison[p.StackIndex]
-		power += p.Count * basePower(s.Type) * int(s.Level)
-	}
-	return ResourceBank{ResourceGold: power}
-}
-
 func diplomacyCost(defender []GarrisonStack) ResourceBank {
 	return ResourceBank{ResourceGold: totalPower(defender) * 2}
 }
@@ -590,6 +628,15 @@ func civilizationExists(state *GameState, civID string) bool {
 		}
 	}
 	return false
+}
+
+func civilizationByID(state *GameState, id string) *Civilization {
+	for i := range state.Civilizations {
+		if state.Civilizations[i].ID == id {
+			return &state.Civilizations[i]
+		}
+	}
+	return nil
 }
 
 func validateStackPicks(picks []StackPick, garrison []GarrisonStack) ([]StackPick, error) {

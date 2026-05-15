@@ -151,6 +151,12 @@ export interface OfferDiplomacy {
   r: number;
 }
 
+export interface BuyTile {
+  type: 'buy_tile';
+  q: number;
+  r: number;
+}
+
 export interface AcceptDiplomacy {
   type: 'accept_diplomacy';
   q: number;
@@ -188,5 +194,6 @@ export type ClientAction =
   | AcceptDiplomacy
   | DeclineDiplomacy
   | CancelDiplomacy
+  | BuyTile
   | EndTurn
   | LeaveGame;

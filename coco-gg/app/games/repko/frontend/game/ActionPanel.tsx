@@ -17,7 +17,8 @@ export type SubAction =
   | 'upgrade'
   | 'move'
   | 'attack'
-  | 'diplomacy';
+  | 'diplomacy'
+  | 'buy';
 
 const BASE_POWER: Record<UnitType, number> = { infantry: 1, cavalry: 2, artillery: 3 };
 
@@ -82,7 +83,7 @@ function totalUnits(stacks: GarrisonStack[]): number {
   return stacks.reduce((sum, s) => sum + s.count, 0);
 }
 
-function attackGoldCost(picks: StackPick[], garrison: GarrisonStack[]): number {
+function pickedPower(picks: StackPick[], garrison: GarrisonStack[]): number {
   return picks.reduce((sum, p) => {
     const s = garrison[p.stackIndex];
     if (s === undefined) return sum;
@@ -102,7 +103,6 @@ interface ButtonState {
 function describeAttack(
   _tile: Tile,
   sources: Tile[],
-  gold: number,
 ): { state: ButtonState; source: Tile | null } {
   if (sources.length === 0) {
     return {
@@ -123,23 +123,33 @@ function describeAttack(
       source,
     };
   }
-  const cost = totalPower(source.garrison);
-  if (gold < cost) {
-    return {
-      state: {
-        label: `Attack — costs ${cost}g (need ${cost - gold} more)`,
-        disabled: true,
-      },
-      source,
-    };
-  }
+  const units = totalUnits(source.garrison);
+  const power = totalPower(source.garrison);
   return {
     state: {
-      label: `Attack — costs ${cost}g (from (${source.q},${source.r}))`,
+      label: `Attack — ${units} units / ${power} power (from (${source.q},${source.r}))`,
       disabled: false,
     },
     source,
   };
+}
+
+function describeBuy(tile: Tile, sources: Tile[], gold: number): ButtonState {
+  const total = productiveYields(tile.yields).reduce((s, y) => s + y.amount, 0);
+  const cost = total * 20;
+  if (sources.length === 0) {
+    return {
+      label: 'Buy this tile — out of range (need an adjacent friendly tile)',
+      disabled: true,
+    };
+  }
+  if (gold < cost) {
+    return {
+      label: `Buy this tile — costs ${cost}g (need ${cost - gold} more)`,
+      disabled: true,
+    };
+  }
+  return { label: `Buy this tile — costs ${cost}g`, disabled: false };
 }
 
 function describeDiplomacy(
@@ -573,7 +583,6 @@ interface AttackSubPanelProps {
   selectedStackCounts: Map<number, number>;
   onStackCountChange: (stackIndex: number, count: number) => void;
   onAttackSourceChange: (src: { q: number; r: number } | null) => void;
-  gold: number;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -585,7 +594,6 @@ function AttackSubPanel({
   selectedStackCounts,
   onStackCountChange,
   onAttackSourceChange,
-  gold,
   onConfirm,
   onCancel,
 }: AttackSubPanelProps) {
@@ -596,9 +604,8 @@ function AttackSubPanel({
   for (const [idx, c] of selectedStackCounts) {
     if (c > 0) picks.push({ stackIndex: idx, count: c });
   }
-  const attackerPower = attackGoldCost(picks, sourceTile.garrison);
-  const cost = attackerPower;
-  const canConfirm = picks.length > 0 && cost <= gold;
+  const attackerPower = pickedPower(picks, sourceTile.garrison);
+  const canConfirm = picks.length > 0;
 
   return (
     <div className="flex flex-col gap-2">
@@ -664,7 +671,7 @@ function AttackSubPanel({
         </div>
       )}
       <p className="text-[10px] text-slate-700">
-        Attacker power: {attackerPower} | Cost: {cost} gold | Defender power: {defenderPower}
+        Attacker power: {attackerPower} | Defender power: {defenderPower}
       </p>
       <div className="flex items-center gap-2">
         <ActionButton
@@ -753,7 +760,7 @@ function ContextualActions({
   const sources = sortSourcesByPreference(reachableSources(state, myPlayerId, tile));
 
   if (isEnemy) {
-    const { state: attackBtn, source } = describeAttack(tile, sources, gold);
+    const { state: attackBtn, source } = describeAttack(tile, sources);
     const pending =
       state.pendingDiplomacy?.some((o) => o.q === tile.q && o.r === tile.r) ?? false;
     const dipBtn = describeDiplomacy(tile, sources, gold, pending);
@@ -779,7 +786,8 @@ function ContextualActions({
   }
 
   if (isNeutral) {
-    const { state: attackBtn, source } = describeAttack(tile, sources, gold);
+    const { state: attackBtn, source } = describeAttack(tile, sources);
+    const buyBtn = describeBuy(tile, sources, gold);
     return (
       <div className="flex flex-col gap-2">
         <ActionButton
@@ -791,6 +799,11 @@ function ContextualActions({
             }
             onSubActionChange('attack');
           }}
+        />
+        <ActionButton
+          label={buyBtn.label}
+          disabled={buyBtn.disabled}
+          onClick={() => onSubActionChange('buy')}
         />
       </div>
     );
@@ -929,7 +942,6 @@ export function ActionPanel({
             selectedStackCounts={selectedStackCounts}
             onStackCountChange={onStackCountChange}
             onAttackSourceChange={onAttackSourceChange}
-            gold={gold}
             onConfirm={handleAttackConfirm}
             onCancel={resetToInspect}
           />
@@ -948,6 +960,38 @@ export function ActionPanel({
             onConfirm={handleDiplomacyConfirm}
             onCancel={resetToInspect}
           />
+        )}
+        {subAction === 'buy' && (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-slate-700">
+              Confirm purchase of{' '}
+              <span className="font-semibold">
+                {selectedTile.name !== undefined && selectedTile.name !== ''
+                  ? selectedTile.name
+                  : `(${selectedTile.q},${selectedTile.r})`}
+              </span>{' '}
+              for {productiveYields(selectedTile.yields).reduce((s, y) => s + y.amount, 0) * 20} gold.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onAction({ type: 'buy_tile', q: selectedTile.q, r: selectedTile.r });
+                  resetToInspect();
+                }}
+                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                onClick={resetToInspect}
+                className="rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </footer>

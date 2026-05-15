@@ -10,6 +10,7 @@ const (
 	MsgUpgrade           MessageType = "upgrade"
 	MsgMove              MessageType = "move"
 	MsgAttack            MessageType = "attack"
+	MsgBuyTile           MessageType = "buy_tile"
 	MsgOfferDiplomacy    MessageType = "offer_diplomacy"
 	MsgAcceptDiplomacy   MessageType = "accept_diplomacy"
 	MsgDeclineDiplomacy  MessageType = "decline_diplomacy"
@@ -101,6 +102,12 @@ type Attack struct {
 	ToQ   int         `json:"toQ"`
 	ToR   int         `json:"toR"`
 	Units []StackPick `json:"units"`
+}
+
+type BuyTile struct {
+	Type MessageType `json:"type"`
+	Q    int         `json:"q"`
+	R    int         `json:"r"`
 }
 
 type OfferDiplomacy struct {

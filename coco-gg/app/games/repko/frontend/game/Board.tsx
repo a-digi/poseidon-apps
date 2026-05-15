@@ -12,6 +12,7 @@ interface BoardProps {
   selectedSource?: { q: number; r: number } | null;
   onTileClick?: (q: number, r: number) => void;
   attackMode?: boolean;
+  inspectedTile?: { q: number; r: number } | null;
 }
 
 const HEX_SIZE = 28;
@@ -241,6 +242,7 @@ interface RenderedTile {
   isReachable: boolean;
   isStartingHighlight: boolean;
   hasPendingDiplomacy: boolean;
+  isInspected: boolean;
   units: number;
   power: number;
 }
@@ -253,6 +255,7 @@ export function Board({
   selectedSource,
   onTileClick,
   attackMode,
+  inspectedTile,
 }: BoardProps) {
   const tiles = state.board?.tiles ?? [];
 
@@ -339,6 +342,11 @@ export function Board({
         isReachable: reachableHighlights?.has(key) ?? false,
         isStartingHighlight: startingTileHighlights?.has(key) ?? false,
         hasPendingDiplomacy: pendingDiplomacyKeys.has(key),
+        isInspected:
+          inspectedTile !== null &&
+          inspectedTile !== undefined &&
+          inspectedTile.q === tile.q &&
+          inspectedTile.r === tile.r,
         units: totalUnits(tile.garrison),
         power: totalPowerOf(tile.garrison),
       };
@@ -351,6 +359,7 @@ export function Board({
     startingTileHighlights,
     pendingDiplomacyKeys,
     myPlayerId,
+    inspectedTile,
   ]);
 
   const bounds = useMemo(() => boardBounds(tiles, HEX_SIZE), [tiles]);
@@ -654,6 +663,23 @@ export function Board({
                     strokeWidth={0.8}
                   />
                 </g>
+              )}
+              {r.isInspected && r.tile.name !== undefined && r.tile.name !== '' && (
+                <text
+                  x={r.cx}
+                  y={r.cy - HEX_SIZE * 0.5}
+                  textAnchor="middle"
+                  fill="#ffffff"
+                  style={{
+                    fontSize: Math.max(9, Math.round(11 * Math.min(zoom, 2))),
+                    fontWeight: 700,
+                    paintOrder: 'stroke',
+                    stroke: '#0f172a',
+                    strokeWidth: 2,
+                  }}
+                >
+                  {r.tile.name}
+                </text>
               )}
               {yieldLabel !== '' && (
                 <text
