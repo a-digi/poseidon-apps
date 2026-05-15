@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"net"
@@ -13,7 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"coco-gg-plugin/game"
+	"coco-gg-plugin/gamemeta"
+	"coco-gg-plugin/games/movement"
 )
 
 const (
@@ -52,18 +54,13 @@ func main() {
 
 	log.Printf("main: listening (addr=%s)", listener.Addr())
 
-	mgr := game.NewManager()
-	go mgr.StartSweeper(ctx)
-	wsh := NewWSHandler(mgr)
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
-	mux.HandleFunc("GET /ws", wsh.ServeHTTP)
-	mux.HandleFunc("POST /api/rooms", CreateRoomHandler(mgr))
-	mux.HandleFunc("GET /api/rooms", ListRoomsHandler(mgr))
-	mux.HandleFunc("GET /api/rooms/{code}", GetRoomHandler(mgr))
-	mux.HandleFunc("DELETE /api/rooms/{code}", DestroyRoomHandler(mgr))
-	mux.HandleFunc("DELETE /api/rooms/{code}/players/{playerId}", KickPlayerHandler(mgr))
+
+	games := []gamemeta.Info{
+		movement.Register(ctx, mux),
+	}
+	mux.HandleFunc("GET /api/games", listGamesHandler(games))
 
 	server := &http.Server{
 		Handler:     mux,
@@ -112,4 +109,16 @@ func writePortFile(dataDir string, port int) error {
 		return err
 	}
 	return os.Rename(tmp, filepath.Join(dataDir, portFile))
+}
+
+func listGamesHandler(games []gamemeta.Info) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("http: %s %s", r.Method, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(games); err != nil {
+			log.Printf("http: %s %s -> 500 (err=%v)", r.Method, r.URL.Path, err)
+			return
+		}
+		log.Printf("http: %s %s -> 200 (games=%d)", r.Method, r.URL.Path, len(games))
+	}
 }
