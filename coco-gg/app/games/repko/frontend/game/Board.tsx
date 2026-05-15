@@ -685,6 +685,15 @@ export function Board({
                   />
                 </g>
               )}
+              {r.isInspected && (
+                <path
+                  d={r.path}
+                  fill="#fef08a"
+                  fillOpacity={0.28}
+                  stroke="#facc15"
+                  strokeWidth={3.5}
+                />
+              )}
               {r.isInspected && r.tile.name !== undefined && r.tile.name !== '' && (
                 <text
                   x={r.cx}

@@ -481,42 +481,45 @@ function RecruitSubPanel({ tile, credits, steel, roster, onConfirm, onCancel }: 
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[10px] text-slate-500">Recruit on tile ({tile.q},{tile.r})</p>
-      {roster.map((u) => {
-        const cost = recruitCreditSteelCost(u, counts[u]);
-        const unitCost = recruitCreditSteelCost(u, 1);
-        const canConfirm = counts[u] > 0 && cost.credits <= credits && cost.steel <= steel;
-        return (
-          <div
-            key={u}
-            className="flex items-center justify-between gap-2 rounded border border-slate-200 bg-white px-2 py-1"
-          >
-            <div className="flex items-center gap-2 text-xs text-slate-800">
-              <span className="text-base">{UNIT_ICON[u]}</span>
-              <span>{UNIT_NAME[u]}</span>
-            </div>
-            <Stepper
-              value={counts[u]}
-              min={0}
-              max={99}
-              onChange={(n) => setCount(u, n)}
-            />
-            <span className="w-20 text-right text-[10px] text-slate-500">
-              {unitCost.credits}c + {unitCost.steel}⚒
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                if (!canConfirm) return;
-                onConfirm(u, counts[u]);
-              }}
-              disabled={!canConfirm}
-              className="rounded bg-slate-900 px-2 py-1 text-[11px] font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+      <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+        {roster.map((u) => {
+          const cost = recruitCreditSteelCost(u, counts[u]);
+          const unitCost = recruitCreditSteelCost(u, 1);
+          const canAffordOne = unitCost.credits <= credits && unitCost.steel <= steel;
+          const canConfirm = counts[u] > 0 && cost.credits <= credits && cost.steel <= steel;
+          return (
+            <div
+              key={u}
+              className={`flex items-center justify-between gap-2 rounded border border-slate-200 bg-white px-2 py-1${canAffordOne ? '' : ' opacity-40 grayscale'}`}
             >
-              Confirm
-            </button>
-          </div>
-        );
-      })}
+              <div className="flex items-center gap-2 text-xs text-slate-800">
+                <span className="text-base">{UNIT_ICON[u]}</span>
+                <span>{UNIT_NAME[u]}</span>
+              </div>
+              <Stepper
+                value={counts[u]}
+                min={0}
+                max={99}
+                onChange={(n) => setCount(u, n)}
+              />
+              <span className="w-20 text-right text-[10px] text-slate-500">
+                {unitCost.credits}c + {unitCost.steel}⚒
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!canConfirm) return;
+                  onConfirm(u, counts[u]);
+                }}
+                disabled={!canConfirm}
+                className="rounded bg-slate-900 px-2 py-1 text-[11px] font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                Confirm
+              </button>
+            </div>
+          );
+        })}
+      </div>
       <CancelButton onClick={onCancel} />
     </div>
   );

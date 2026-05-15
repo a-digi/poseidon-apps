@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"log"
-	"math"
 	"sort"
 )
 
@@ -43,6 +42,8 @@ const (
 )
 
 const marchSpeedPerRound = 3
+
+const minCapitalDistance = 7
 
 type ActionPickCivilization struct{ CivilizationID string }
 type ActionPickStartingTile struct{ Q, R int }
@@ -273,72 +274,67 @@ func assignCapitalsBySector(state *GameState) {
 	if state.Board == nil {
 		return
 	}
-	active := []*PlayerState{}
+	active := make([]*PlayerState, 0, len(state.Players))
 	for _, p := range state.Players {
 		if p.LeftGame || p.Disconnected {
 			continue
 		}
 		active = append(active, p)
 	}
-	n := len(active)
-	if n == 0 {
+	if len(active) == 0 {
 		return
 	}
 
-	rotation := newRNG().Float64() * 2 * math.Pi
-	type tileInfo struct {
-		tile  *Tile
-		angle float64
-		dist  float64
-	}
-	infos := make([]tileInfo, 0, len(state.Board.Tiles))
-	for _, t := range state.Board.Tiles {
-		if t.OwnerID != "" {
-			continue
-		}
-		x := math.Sqrt(3) * (float64(t.Q) + float64(t.R)/2.0)
-		y := 1.5 * float64(t.R)
-		a := math.Atan2(y, x)
-		if a < 0 {
-			a += 2 * math.Pi
-		}
-		a = math.Mod(a-rotation+2*math.Pi, 2*math.Pi)
-		infos = append(infos, tileInfo{
-			tile:  t,
-			angle: a,
-			dist:  math.Sqrt(x*x + y*y),
-		})
-	}
+	rng := newRNG()
+	assigned := make([]Hex, 0, len(active))
 
-	binSize := 2 * math.Pi / float64(n)
-	for i, p := range active {
-		binStart := float64(i) * binSize
-		binEnd := binStart + binSize
-		var best *tileInfo
-		for k := range infos {
-			inf := &infos[k]
-			if inf.tile.OwnerID != "" {
+	for _, p := range active {
+		candidates := make([]*Tile, 0)
+		for _, t := range state.Board.Tiles {
+			if t.OwnerID != "" {
 				continue
 			}
-			if inf.angle < binStart || inf.angle >= binEnd {
-				continue
-			}
-			if best == nil || inf.dist > best.dist {
-				best = inf
-			}
-		}
-		if best == nil {
-			for k := range infos {
-				if infos[k].tile.OwnerID == "" {
-					best = &infos[k]
+			ok := true
+			for _, h := range assigned {
+				if cubeDistance(Hex{Q: t.Q, R: t.R}, h) < minCapitalDistance {
+					ok = false
 					break
 				}
 			}
+			if ok {
+				candidates = append(candidates, t)
+			}
 		}
-		if best == nil {
+		var chosen *Tile
+		if len(candidates) > 0 {
+			chosen = candidates[rng.IntN(len(candidates))]
+		} else {
+			bestMin := -1
+			for _, t := range state.Board.Tiles {
+				if t.OwnerID != "" {
+					continue
+				}
+				minD := 1 << 30
+				if len(assigned) == 0 {
+					minD = 0
+				}
+				for _, h := range assigned {
+					cd := cubeDistance(Hex{Q: t.Q, R: t.R}, h)
+					if cd < minD {
+						minD = cd
+					}
+				}
+				if minD > bestMin {
+					bestMin = minD
+					chosen = t
+				}
+			}
+		}
+		if chosen == nil {
 			continue
 		}
-		setupCapital(state, p, best.tile)
+		setupCapital(state, p, chosen)
+		assigned = append(assigned, Hex{Q: chosen.Q, R: chosen.R})
 	}
 }
 
