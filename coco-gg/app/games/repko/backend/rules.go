@@ -1,6 +1,8 @@
 package repko
 
 import (
+	cryptorand "crypto/rand"
+	"encoding/hex"
 	"errors"
 	"log"
 	"sort"
@@ -31,12 +33,15 @@ var (
 	ErrNotYourDiplomacyOffer   = errors.New("not your diplomacy offer")
 	ErrEmptyUnitSelection      = errors.New("no units selected")
 	ErrAttackFromEmptyTile     = errors.New("attacking from empty tile")
+	ErrNoPathThroughOwnedTiles = errors.New("no path through owned tiles")
 )
 
 const (
 	actionKeyMove   = "move"
 	actionKeyAttack = "attack"
 )
+
+const marchSpeedPerRound = 3
 
 type ActionPickCivilization struct{ CivilizationID string }
 type ActionPickStartingTile struct{ Q, R int }
@@ -54,6 +59,11 @@ type StackPick struct {
 	Count      int `json:"count"`
 }
 type ActionMove struct {
+	FromQ, FromR int
+	ToQ, ToR     int
+	Units        []StackPick
+}
+type ActionMarch struct {
 	FromQ, FromR int
 	ToQ, ToR     int
 	Units        []StackPick
@@ -115,6 +125,10 @@ func ValidateAndApply(state *GameState, playerID string, action any) error {
 			}
 		case ActionMove:
 			if err := validateAndApplyMove(state, playerID, a); err != nil {
+				return err
+			}
+		case ActionMarch:
+			if err := validateAndApplyMarch(state, playerID, a); err != nil {
 				return err
 			}
 		case ActionAttack:
@@ -393,6 +407,130 @@ func validateAndApplyMove(state *GameState, playerID string, a ActionMove) error
 	})
 	advancePlayingTurn(state)
 	return nil
+}
+
+func validateAndApplyMarch(state *GameState, playerID string, a ActionMarch) error {
+	if state.Phase != PhasePlaying {
+		return ErrInvalidPhase
+	}
+	if state.UsedActionsThisTurn[actionKeyMove] >= 1 {
+		return ErrMoveLimitReached
+	}
+	from := Hex{Q: a.FromQ, R: a.FromR}
+	to := Hex{Q: a.ToQ, R: a.ToR}
+	if from == to {
+		return ErrInvalidTile
+	}
+	fromTile := state.tile(from.Q, from.R)
+	toTile := state.tile(to.Q, to.R)
+	if fromTile == nil || toTile == nil {
+		return ErrInvalidTile
+	}
+	if fromTile.OwnerID != playerID || toTile.OwnerID != playerID {
+		return ErrTileNotOwned
+	}
+	path, ok := pathThroughOwnedTiles(state, playerID, from, to)
+	if !ok {
+		return ErrNoPathThroughOwnedTiles
+	}
+	picks, err := validateStackPicks(a.Units, fromTile.Garrison)
+	if err != nil {
+		return err
+	}
+
+	units := make([]GarrisonStack, 0, len(picks))
+	for _, p := range picks {
+		src := &fromTile.Garrison[p.StackIndex]
+		units = append(units, GarrisonStack{Type: src.Type, Level: src.Level, Count: p.Count})
+		src.Count -= p.Count
+	}
+	fromTile.Garrison = filterNonEmpty(fromTile.Garrison)
+
+	army := &Army{
+		ID:            newArmyID(),
+		OwnerID:       playerID,
+		CurrentQ:      from.Q,
+		CurrentR:      from.R,
+		DestQ:         to.Q,
+		DestR:         to.R,
+		PathRemaining: path,
+		Units:         units,
+	}
+	state.MovingArmies = append(state.MovingArmies, army)
+
+	state.UsedActionsThisTurn[actionKeyMove]++
+
+	totalUnits := 0
+	for _, u := range units {
+		totalUnits += u.Count
+	}
+	actor := state.playerByID(playerID)
+	actorName := ""
+	if actor != nil {
+		actorName = actor.Name
+	}
+	state.emit(GameEvent{
+		Kind:      "march_start",
+		ActorID:   playerID,
+		ActorName: actorName,
+		FromQ:     intPtr(from.Q),
+		FromR:     intPtr(from.R),
+		TargetQ:   intPtr(to.Q),
+		TargetR:   intPtr(to.R),
+		TileName:  toTile.Name,
+		UnitCount: totalUnits,
+	})
+
+	log.Printf("game: repko march (player=%s from=(%d,%d) to=(%d,%d) units=%d hops=%d)",
+		playerID, from.Q, from.R, to.Q, to.R, totalUnits, len(path))
+
+	advancePlayingTurn(state)
+	return nil
+}
+
+func pathThroughOwnedTiles(state *GameState, ownerID string, from, to Hex) ([]Hex, bool) {
+	if from == to {
+		return nil, false
+	}
+	visited := map[Hex]bool{from: true}
+	prev := map[Hex]Hex{}
+	queue := []Hex{from}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if cur == to {
+			var rev []Hex
+			for cur != from {
+				rev = append(rev, cur)
+				cur = prev[cur]
+			}
+			for i, j := 0, len(rev)-1; i < j; i, j = i+1, j-1 {
+				rev[i], rev[j] = rev[j], rev[i]
+			}
+			return rev, true
+		}
+		for _, n := range hexNeighbors(cur) {
+			if visited[n] {
+				continue
+			}
+			t := state.tile(n.Q, n.R)
+			if t == nil || t.OwnerID != ownerID {
+				continue
+			}
+			visited[n] = true
+			prev[n] = cur
+			queue = append(queue, n)
+		}
+	}
+	return nil, false
+}
+
+func newArmyID() string {
+	buf := make([]byte, 4)
+	if _, err := cryptorand.Read(buf); err != nil {
+		panic(err)
+	}
+	return "ar" + hex.EncodeToString(buf)
 }
 
 func validateAndApplyAttack(state *GameState, playerID string, a ActionAttack) error {
@@ -1043,6 +1181,7 @@ func advancePlayingTurn(state *GameState) {
 	if allActed {
 		state.RoundNumber++
 		state.PlayersActedThisRound = map[string]bool{}
+		advanceAllArmies(state)
 		if state.MaxRounds > 0 && state.RoundNumber > state.MaxRounds {
 			state.Phase = PhaseGameOver
 			state.WinnerID = playerWithMostTiles(state)
@@ -1195,6 +1334,11 @@ func recomputeCounters(state *GameState) {
 			unitCounts[t.OwnerID] += s.Count
 		}
 	}
+	for _, army := range state.MovingArmies {
+		for _, u := range army.Units {
+			unitCounts[army.OwnerID] += u.Count
+		}
+	}
 	for _, p := range state.Players {
 		p.TileCount = tileCounts[p.ID]
 		p.UnitCount = unitCounts[p.ID]
@@ -1270,4 +1414,67 @@ func destroyLowestPowerUnit(tiles []*Tile) bool {
 	tile := tiles[best.tileIdx]
 	tile.Garrison[best.stackIdx].Count--
 	return true
+}
+
+func advanceAllArmies(state *GameState) {
+	if len(state.MovingArmies) == 0 {
+		return
+	}
+	kept := make([]*Army, 0, len(state.MovingArmies))
+	for _, army := range state.MovingArmies {
+		curTile := state.tile(army.CurrentQ, army.CurrentR)
+		if curTile == nil || curTile.OwnerID != army.OwnerID {
+			continue
+		}
+		remaining := army.PathRemaining
+		steps := 0
+		for steps < marchSpeedPerRound && len(remaining) > 0 {
+			next := remaining[0]
+			t := state.tile(next.Q, next.R)
+			if t == nil || t.OwnerID != army.OwnerID {
+				break
+			}
+			army.CurrentQ = next.Q
+			army.CurrentR = next.R
+			remaining = remaining[1:]
+			steps++
+		}
+		army.PathRemaining = remaining
+
+		if len(army.PathRemaining) == 0 {
+			dest := state.tile(army.CurrentQ, army.CurrentR)
+			if dest != nil && dest.OwnerID == army.OwnerID {
+				for _, u := range army.Units {
+					addToStack(&dest.Garrison, u.Type, u.Level, u.Count)
+				}
+			}
+			tileName := ""
+			if dest != nil {
+				tileName = dest.Name
+			}
+			actor := state.playerByID(army.OwnerID)
+			actorName := ""
+			if actor != nil {
+				actorName = actor.Name
+			}
+			totalUnits := 0
+			for _, u := range army.Units {
+				totalUnits += u.Count
+			}
+			state.emit(GameEvent{
+				Kind:      "march_arrive",
+				ActorID:   army.OwnerID,
+				ActorName: actorName,
+				TargetQ:   intPtr(army.CurrentQ),
+				TargetR:   intPtr(army.CurrentR),
+				TileName:  tileName,
+				UnitCount: totalUnits,
+			})
+			log.Printf("game: repko march_arrive (player=%s tile=(%d,%d) units=%d)",
+				army.OwnerID, army.CurrentQ, army.CurrentR, totalUnits)
+			continue
+		}
+		kept = append(kept, army)
+	}
+	state.MovingArmies = kept
 }

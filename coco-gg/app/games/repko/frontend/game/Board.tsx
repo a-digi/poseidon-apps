@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react';
-import type { GarrisonStack, ResourceType, StateMsg, Tile } from '../types';
+import type { Army, GarrisonStack, ResourceType, StateMsg, Tile } from '../types';
 import { boardBounds, hexCorner, hexToPixel } from './coords';
 import { BASE_POWER, UNIT_ICON } from './units';
 import type { Animation } from './GameView';
@@ -11,11 +11,14 @@ interface BoardProps {
   myPlayerId: string | null;
   startingTileHighlights?: Set<string>;
   reachableHighlights?: Set<string>;
+  marchPathHighlights?: Set<string>;
   selectedSource?: { q: number; r: number } | null;
   onTileClick?: (q: number, r: number) => void;
   attackMode?: boolean;
   inspectedTile?: { q: number; r: number } | null;
   animations?: Animation[];
+  armies?: Army[];
+  onArmyClick?: (armyId: string) => void;
 }
 
 const ANIM_CLASS: Record<Animation['kind'], string> = {
@@ -252,6 +255,7 @@ interface RenderedTile {
   isOwnedByOther: boolean;
   isSelectedSource: boolean;
   isReachable: boolean;
+  isMarchPath: boolean;
   isStartingHighlight: boolean;
   hasPendingDiplomacy: boolean;
   isInspected: boolean;
@@ -259,78 +263,19 @@ interface RenderedTile {
   power: number;
 }
 
-interface ZoomToolbarProps {
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onReset: () => void;
-}
-
-function ZoomToolbar({ onZoomIn, onZoomOut, onReset }: ZoomToolbarProps) {
-  const [hidden, setHidden] = useState(false);
-
-  if (hidden) {
-    return (
-      <div className="absolute inset-y-0 right-0 flex items-center">
-        <button
-          type="button"
-          aria-label="Show zoom controls"
-          onClick={() => setHidden(false)}
-          className="flex h-10 w-8 items-center justify-center rounded-l-md bg-slate-800 text-white shadow-md hover:bg-slate-700"
-        >
-          ‹
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="absolute bottom-3 right-3 flex flex-col gap-1 rounded-md bg-slate-800 p-1 shadow-lg">
-      <button
-        type="button"
-        onClick={onZoomIn}
-        className="flex h-10 w-10 items-center justify-center rounded text-lg font-semibold text-white hover:bg-slate-700"
-        aria-label="Zoom in"
-      >
-        +
-      </button>
-      <button
-        type="button"
-        onClick={onZoomOut}
-        className="flex h-10 w-10 items-center justify-center rounded text-lg font-semibold text-white hover:bg-slate-700"
-        aria-label="Zoom out"
-      >
-        −
-      </button>
-      <button
-        type="button"
-        onClick={onReset}
-        className="flex h-10 w-10 items-center justify-center rounded text-lg font-semibold text-white hover:bg-slate-700"
-        aria-label="Reset zoom"
-      >
-        ⊙
-      </button>
-      <button
-        type="button"
-        onClick={() => setHidden(true)}
-        className="flex h-10 w-10 items-center justify-center rounded text-sm font-semibold text-slate-300 hover:bg-slate-700"
-        aria-label="Hide zoom controls"
-      >
-        ›
-      </button>
-    </div>
-  );
-}
-
 export function Board({
   state,
   myPlayerId,
   startingTileHighlights,
   reachableHighlights,
+  marchPathHighlights,
   selectedSource,
   onTileClick,
   attackMode,
   inspectedTile,
   animations,
+  armies,
+  onArmyClick,
 }: BoardProps) {
   const tiles = state.board?.tiles ?? [];
 
@@ -415,6 +360,7 @@ export function Board({
           selectedSource.q === tile.q &&
           selectedSource.r === tile.r,
         isReachable: reachableHighlights?.has(key) ?? false,
+        isMarchPath: marchPathHighlights?.has(key) ?? false,
         isStartingHighlight: startingTileHighlights?.has(key) ?? false,
         hasPendingDiplomacy: pendingDiplomacyKeys.has(key),
         isInspected:
@@ -431,6 +377,7 @@ export function Board({
     playerColorAndFlag,
     selectedSource,
     reachableHighlights,
+    marchPathHighlights,
     startingTileHighlights,
     pendingDiplomacyKeys,
     myPlayerId,
@@ -459,17 +406,6 @@ export function Board({
   const visMinX = baseCenterX + clampedPanX - vw / 2;
   const visMinY = baseCenterY + clampedPanY - vh / 2;
   const viewBox = `${visMinX} ${visMinY} ${vw} ${vh}`;
-
-  const handleZoomIn = useCallback(() => {
-    setZoom((z) => clamp(z * 1.25, MIN_ZOOM, MAX_ZOOM));
-  }, []);
-  const handleZoomOut = useCallback(() => {
-    setZoom((z) => clamp(z / 1.25, MIN_ZOOM, MAX_ZOOM));
-  }, []);
-  const handleZoomReset = useCallback(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  }, []);
 
   const handleWheel = useCallback((e: ReactWheelEvent<SVGSVGElement>) => {
     e.preventDefault();
@@ -697,6 +633,16 @@ export function Board({
                   />
                 </g>
               )}
+              {r.isMarchPath && (
+                <path
+                  d={r.path}
+                  fill="#c4b5fd"
+                  fillOpacity={0.25}
+                  stroke="#7c3aed"
+                  strokeWidth={2.5}
+                  strokeDasharray="5 3"
+                />
+              )}
               {showAttackRing && showTier1 && r.units > 0 && (
                 <text
                   x={r.cx + HEX_SIZE * 0.7}
@@ -824,6 +770,72 @@ export function Board({
             </g>
           );
         })}
+        {(() => {
+          if (armies === undefined || armies.length === 0) return null;
+          const indexByTile = new Map<string, number>();
+          return armies.map((army) => {
+            const tileK = tileKey(army.currentQ, army.currentR);
+            const idx = indexByTile.get(tileK) ?? 0;
+            indexByTile.set(tileK, idx + 1);
+            const { x, y } = hexToPixel(army.currentQ, army.currentR, HEX_SIZE);
+            const offsetX = (idx % 3) * 6 - 6;
+            const offsetY = Math.floor(idx / 3) * 8;
+            const ownerColor =
+              playerColorAndFlag.get(army.ownerId)?.color ?? '#7c3aed';
+            let unitTotal = 0;
+            for (const u of army.units) unitTotal += u.count;
+            return (
+              <g
+                key={`army-${army.id}`}
+                transform={`translate(${x + offsetX},${y + offsetY})`}
+                className="cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onArmyClick?.(army.id);
+                }}
+              >
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={HEX_SIZE * 0.32}
+                  fill="#ffffff"
+                  stroke={ownerColor}
+                  strokeWidth={2}
+                />
+                <text
+                  x={0}
+                  y={0}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  style={{ fontSize: HEX_SIZE * 0.45 }}
+                >
+                  🚶
+                </text>
+                <g transform={`translate(${HEX_SIZE * 0.28},${HEX_SIZE * 0.28})`}>
+                  <rect
+                    x={-9}
+                    y={-6}
+                    rx={5}
+                    ry={5}
+                    width={18}
+                    height={12}
+                    fill="#0f172a"
+                    fillOpacity={0.9}
+                  />
+                  <text
+                    x={0}
+                    y={3}
+                    textAnchor="middle"
+                    fill="#ffffff"
+                    style={{ fontSize: 9, fontWeight: 600 }}
+                  >
+                    {unitTotal}
+                  </text>
+                </g>
+              </g>
+            );
+          });
+        })()}
         {animations?.map((anim) => {
           const { x, y } = hexToPixel(anim.q, anim.r, HEX_SIZE);
           return (
@@ -853,11 +865,6 @@ export function Board({
           );
         })}
       </svg>
-      <ZoomToolbar
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onReset={handleZoomReset}
-      />
     </div>
   );
 }

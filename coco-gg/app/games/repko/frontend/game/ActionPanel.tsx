@@ -9,7 +9,7 @@ import type {
   Tile,
   UnitType,
 } from '../types';
-import { hexDistance } from './coords';
+import { hexDistance, pathThroughOwnedTiles } from './coords';
 import { BASE_POWER, UNIT_ICON, UNIT_NAME, UNIT_COSTS, UNIT_ORDER } from './units';
 
 export type SubAction =
@@ -17,6 +17,7 @@ export type SubAction =
   | 'recruit'
   | 'upgrade'
   | 'move'
+  | 'march'
   | 'attack'
   | 'diplomacy'
   | 'buy'
@@ -242,6 +243,8 @@ interface ActionPanelProps {
   onStackCountChange: (stackIndex: number, count: number) => void;
   attackSourceOverride: { q: number; r: number } | null;
   onAttackSourceChange: (src: { q: number; r: number } | null) => void;
+  marchDestination: { q: number; r: number } | null;
+  onMarchDestinationChange: (dest: { q: number; r: number } | null) => void;
   onAction: (action: ClientAction) => void;
 }
 
@@ -630,6 +633,133 @@ function MoveSubPanel({
   );
 }
 
+interface MarchSubPanelProps {
+  state: StateMsg;
+  myPlayerId: string;
+  tile: Tile;
+  selectedStackCounts: Map<number, number>;
+  onStackCountChange: (stackIndex: number, count: number) => void;
+  marchDestination: { q: number; r: number } | null;
+  onConfirm: (destination: { q: number; r: number }, units: StackPick[]) => void;
+  onCancel: () => void;
+}
+
+function MarchSubPanel({
+  state,
+  myPlayerId,
+  tile,
+  selectedStackCounts,
+  onStackCountChange,
+  marchDestination,
+  onConfirm,
+  onCancel,
+}: MarchSubPanelProps) {
+  const destinationTile = useMemo<Tile | null>(() => {
+    if (marchDestination === null) return null;
+    return findTile(state, marchDestination.q, marchDestination.r) ?? null;
+  }, [state, marchDestination]);
+
+  const path = useMemo(() => {
+    if (marchDestination === null) return null;
+    return pathThroughOwnedTiles(
+      state,
+      myPlayerId,
+      { q: tile.q, r: tile.r },
+      marchDestination,
+    );
+  }, [state, myPlayerId, tile.q, tile.r, marchDestination]);
+
+  let totalSelected = 0;
+  let totalSelectedPower = 0;
+  for (const [idx, c] of selectedStackCounts) {
+    const stack = tile.garrison[idx];
+    if (stack === undefined) continue;
+    totalSelected += c;
+    totalSelectedPower += c * BASE_POWER[stack.type] * stack.level;
+  }
+
+  const picks: StackPick[] = [];
+  for (const [idx, c] of selectedStackCounts) {
+    if (c > 0) picks.push({ stackIndex: idx, count: c });
+  }
+
+  const eta = path !== null ? Math.ceil(path.length / 3) : null;
+  const canConfirm =
+    marchDestination !== null && path !== null && picks.length > 0;
+
+  const destLabel =
+    destinationTile?.name !== undefined && destinationTile.name !== ''
+      ? destinationTile.name
+      : marchDestination !== null
+        ? `(${marchDestination.q},${marchDestination.r})`
+        : '';
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[10px] text-slate-500">
+        Source: ({tile.q},{tile.r}).
+      </p>
+      {marchDestination === null ? (
+        <div className="rounded border border-dashed border-slate-300 bg-white px-2 py-2">
+          <p className="text-xs font-medium text-slate-800">Pick destination</p>
+          <p className="text-[10px] text-slate-500">
+            Click any of your tiles connected to this one.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded border border-violet-300 bg-violet-50 px-2 py-1 text-xs text-slate-800">
+          <span className="font-medium">Destination:</span> {destLabel}
+          {path === null ? (
+            <span className="ml-2 text-rose-700">— no path through your territory</span>
+          ) : (
+            <span className="ml-2 text-violet-700">
+              — {path.length} hop{path.length === 1 ? '' : 's'}, ETA {eta} round{eta === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
+      )}
+      {tile.garrison.length === 0 ? (
+        <p className="text-[10px] text-slate-500">No units on this tile.</p>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {tile.garrison.map((stack, idx) => (
+            <div
+              key={`${idx}-${stack.type}-${stack.level}`}
+              className="flex items-center justify-between gap-2 rounded border border-slate-200 bg-white px-2 py-1"
+            >
+              <div className="flex items-center gap-2 text-xs text-slate-800">
+                <span className="text-base">{UNIT_ICON[stack.type]}</span>
+                <span>L{stack.level}</span>
+                <span className="text-[10px] text-slate-500">×{stack.count}</span>
+              </div>
+              <Stepper
+                value={selectedStackCounts.get(idx) ?? 0}
+                min={0}
+                max={stack.count}
+                onChange={(n) => onStackCountChange(idx, n)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="text-[10px] text-slate-600">
+        Selected: {totalSelected} units — power {totalSelectedPower}
+      </p>
+      <div className="flex items-center gap-2">
+        <ActionButton
+          label="Confirm march"
+          disabled={!canConfirm}
+          onClick={() => {
+            if (!canConfirm || marchDestination === null) return;
+            onConfirm(marchDestination, picks);
+          }}
+        />
+        <CancelButton onClick={onCancel} />
+      </div>
+    </div>
+  );
+}
+
 interface AttackSubPanelProps {
   target: Tile;
   sources: Tile[];
@@ -832,7 +962,7 @@ function ContextualActions({
     const canUpgradeTile = tile.production !== 'none' && credits >= 10;
     const hasGarrison = tile.garrison.length > 0;
     return (
-      <div className="grid grid-cols-2 gap-1">
+      <div className="grid grid-cols-3 gap-1">
         <IconActionButton icon="➕" label="Recruit" onClick={() => onSubActionChange('recruit')} />
         <IconActionButton
           icon="⬆️"
@@ -845,6 +975,12 @@ function ContextualActions({
           label="Move units from here"
           disabled={!hasGarrison}
           onClick={() => onSubActionChange('move')}
+        />
+        <IconActionButton
+          icon="🏃"
+          label="March units across territory"
+          disabled={!hasGarrison}
+          onClick={() => onSubActionChange('march')}
         />
         <IconActionButton
           icon="⚙️"
@@ -936,6 +1072,8 @@ export function ActionPanel({
   onStackCountChange,
   attackSourceOverride,
   onAttackSourceChange,
+  marchDestination,
+  onMarchDestinationChange,
   onAction,
 }: ActionPanelProps) {
   const currentPlayer = useMemo(
@@ -1008,6 +1146,27 @@ export function ActionPanel({
 
   const handleDiplomacyConfirm = () => {
     onAction({ type: 'offer_diplomacy', q: selectedTile.q, r: selectedTile.r });
+    resetToInspect();
+  };
+
+  const handleMarchConfirm = (
+    destination: { q: number; r: number },
+    units: StackPick[],
+  ) => {
+    onAction({
+      type: 'march',
+      fromQ: selectedTile.q,
+      fromR: selectedTile.r,
+      toQ: destination.q,
+      toR: destination.r,
+      units,
+    });
+    onMarchDestinationChange(null);
+    resetToInspect();
+  };
+
+  const handleMarchCancel = () => {
+    onMarchDestinationChange(null);
     resetToInspect();
   };
 
@@ -1112,6 +1271,18 @@ export function ActionPanel({
             selectedStackCounts={selectedStackCounts}
             onStackCountChange={onStackCountChange}
             onCancel={resetToInspect}
+          />
+        )}
+        {subAction === 'march' && (
+          <MarchSubPanel
+            state={state}
+            myPlayerId={myPlayerId}
+            tile={selectedTile}
+            selectedStackCounts={selectedStackCounts}
+            onStackCountChange={onStackCountChange}
+            marchDestination={marchDestination}
+            onConfirm={handleMarchConfirm}
+            onCancel={handleMarchCancel}
           />
         )}
         {subAction === 'attack' && attackSource !== undefined && (

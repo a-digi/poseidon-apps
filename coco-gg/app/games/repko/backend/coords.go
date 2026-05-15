@@ -2,7 +2,10 @@ package repko
 
 import "math"
 
-type Hex struct{ Q, R int }
+type Hex struct {
+	Q int `json:"q"`
+	R int `json:"r"`
+}
 
 func hexNeighbors(h Hex) [6]Hex {
 	return [6]Hex{

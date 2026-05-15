@@ -1,5 +1,10 @@
 export type Phase = 'lobby' | 'civ_pick' | 'tile_pick' | 'playing' | 'game_over';
 
+export interface Hex {
+  q: number;
+  r: number;
+}
+
 export type ResourceType = 'credits' | 'steel' | 'fuel' | 'none';
 
 export type UnitType =
@@ -66,6 +71,7 @@ export interface PlayerState {
   tileCount: number;
   unitCount: number;
   eliminated: boolean;
+  leftGame?: boolean;
 }
 
 export interface CurrentTurn {
@@ -85,6 +91,17 @@ export interface Welcome {
   you: { name: string; color: string };
 }
 
+export interface Army {
+  id: string;
+  ownerId: string;
+  currentQ: number;
+  currentR: number;
+  destQ: number;
+  destR: number;
+  pathRemaining: Hex[];
+  units: GarrisonStack[];
+}
+
 export interface StateMsg {
   type: 'state';
   phase: Phase;
@@ -97,6 +114,7 @@ export interface StateMsg {
   you?: YouState;
   maxRounds?: number;
   roundNumber?: number;
+  armies?: Army[];
 }
 
 export interface ErrorMsg {
@@ -118,7 +136,9 @@ export type EventKind =
   | 'offer_diplomacy'
   | 'accept_diplomacy'
   | 'decline_diplomacy'
-  | 'end_turn';
+  | 'end_turn'
+  | 'march_start'
+  | 'march_arrive';
 
 export interface GameEvent {
   kind: EventKind;
@@ -230,6 +250,15 @@ export interface UpgradeTile {
   r: number;
 }
 
+export interface March {
+  type: 'march';
+  fromQ: number;
+  fromR: number;
+  toQ: number;
+  toR: number;
+  units: StackPick[];
+}
+
 export interface EndTurn {
   type: 'end_turn';
 }
@@ -244,6 +273,7 @@ export type ClientAction =
   | Recruit
   | Upgrade
   | Move
+  | March
   | Attack
   | OfferDiplomacy
   | AcceptDiplomacy

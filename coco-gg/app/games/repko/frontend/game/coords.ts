@@ -72,3 +72,52 @@ export function reachableForAction(
   }
   return out;
 }
+
+function hexKey(h: HexCoord): string {
+  return `${h.q},${h.r}`;
+}
+
+export function pathThroughOwnedTiles(
+  state: StateMsg,
+  ownerId: string,
+  from: HexCoord,
+  to: HexCoord,
+): HexCoord[] | null {
+  if (from.q === to.q && from.r === to.r) return null;
+  const tiles = state.board?.tiles ?? [];
+  const tileByKey = new Map<string, Tile>();
+  for (const t of tiles) tileByKey.set(hexKey({ q: t.q, r: t.r }), t);
+  const fromTile = tileByKey.get(hexKey(from));
+  const toTile = tileByKey.get(hexKey(to));
+  if (fromTile === undefined || toTile === undefined) return null;
+  if (fromTile.ownerId !== ownerId || toTile.ownerId !== ownerId) return null;
+
+  const visited = new Set<string>([hexKey(from)]);
+  const prev = new Map<string, HexCoord>();
+  const queue: HexCoord[] = [from];
+  while (queue.length > 0) {
+    const cur = queue.shift() as HexCoord;
+    if (cur.q === to.q && cur.r === to.r) {
+      const rev: HexCoord[] = [];
+      let walker: HexCoord = cur;
+      while (walker.q !== from.q || walker.r !== from.r) {
+        rev.push(walker);
+        const p = prev.get(hexKey(walker));
+        if (p === undefined) return null;
+        walker = p;
+      }
+      rev.reverse();
+      return rev;
+    }
+    for (const n of hexNeighbors(cur)) {
+      const k = hexKey(n);
+      if (visited.has(k)) continue;
+      const t = tileByKey.get(k);
+      if (t === undefined || t.ownerId !== ownerId) continue;
+      visited.add(k);
+      prev.set(k, cur);
+      queue.push(n);
+    }
+  }
+  return null;
+}

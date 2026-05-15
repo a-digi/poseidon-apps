@@ -418,6 +418,7 @@ func (r *Room) buildSnapshotsLocked() map[string][]byte {
 			Type:    MsgState,
 			Phase:   string(PhaseLobby),
 			Players: players,
+			Armies:  []*Army{},
 		}
 		for _, p := range r.players {
 			env := base
@@ -431,6 +432,17 @@ func (r *Room) buildSnapshotsLocked() map[string][]byte {
 		for _, t := range r.state.Board.Tiles {
 			if t.Garrison == nil {
 				t.Garrison = []GarrisonStack{}
+			}
+		}
+	}
+
+	if r.state != nil {
+		for _, army := range r.state.MovingArmies {
+			if army.PathRemaining == nil {
+				army.PathRemaining = []Hex{}
+			}
+			if army.Units == nil {
+				army.Units = []GarrisonStack{}
 			}
 		}
 	}
@@ -453,6 +465,11 @@ func (r *Room) buildSnapshotsLocked() map[string][]byte {
 		pending = make([]DiplomacyOffer, 0)
 	}
 
+	armies := r.state.MovingArmies
+	if armies == nil {
+		armies = []*Army{}
+	}
+
 	base := State{
 		Type:             MsgState,
 		Phase:            string(r.state.Phase),
@@ -460,6 +477,7 @@ func (r *Room) buildSnapshotsLocked() map[string][]byte {
 		Players:          r.state.Players,
 		Current:          r.state.Current,
 		PendingDiplomacy: pending,
+		Armies:           armies,
 		WinnerID:         r.state.WinnerID,
 		MaxRounds:        r.state.MaxRounds,
 		RoundNumber:      r.state.RoundNumber,

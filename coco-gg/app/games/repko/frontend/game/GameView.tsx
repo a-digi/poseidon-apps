@@ -12,8 +12,10 @@ import { ResourcePanel } from './ResourcePanel';
 import { CivilizationPicker } from './CivilizationPicker';
 import { DiplomacyBanner } from './DiplomacyBanner';
 import { EventBanner } from './EventBanner';
-import { reachableForAction } from './coords';
+import { RankingPanel } from './RankingPanel';
+import { pathThroughOwnedTiles, reachableForAction } from './coords';
 import { UNIT_CLASS } from './units';
+import { ArmyInspectorPopover } from './ArmyInspectorPopover';
 
 export interface Animation {
   id: string;
@@ -49,6 +51,10 @@ export function GameView({ state, myPlayerId, events, onAction, onLeave }: GameV
   const [attackSourceOverride, setAttackSourceOverride] = useState<
     { q: number; r: number } | null
   >(null);
+  const [marchDestination, setMarchDestination] = useState<
+    { q: number; r: number } | null
+  >(null);
+  const [inspectedArmyId, setInspectedArmyId] = useState<string | null>(null);
   const [animations, setAnimations] = useState<Animation[]>([]);
   const eventCursorRef = useRef(0);
 
@@ -106,7 +112,12 @@ export function GameView({ state, myPlayerId, events, onAction, onLeave }: GameV
     setSubAction(next);
     setSelectedStackCounts(new Map());
     if (next !== 'attack') setAttackSourceOverride(null);
+    if (next !== 'march') setMarchDestination(null);
   }, []);
+
+  useEffect(() => {
+    setMarchDestination(null);
+  }, [selectedTile]);
 
   const handleStackCountChange = useCallback((stackIndex: number, count: number) => {
     setSelectedStackCounts((prev) => {
@@ -160,6 +171,21 @@ export function GameView({ state, myPlayerId, events, onAction, onLeave }: GameV
   }, [state, myPlayerId, selectedTile, subAction]);
 
   const reachableHighlights = subAction === 'move' ? moveDestinationKeys : new Set<string>();
+
+  const marchPathHighlights = useMemo<Set<string>>(() => {
+    if (
+      state === null ||
+      myPlayerId === null ||
+      selectedTile === null ||
+      subAction !== 'march' ||
+      marchDestination === null
+    ) {
+      return new Set();
+    }
+    const path = pathThroughOwnedTiles(state, myPlayerId, selectedTile, marchDestination);
+    if (path === null) return new Set();
+    return new Set(path.map((h) => tileKey(h.q, h.r)));
+  }, [state, subAction, marchDestination, selectedTile, myPlayerId]);
 
   const attackSource = useMemo<{ q: number; r: number } | null>(() => {
     if (state === null || myPlayerId === null || selectedTileObj === null) return null;
@@ -216,6 +242,14 @@ export function GameView({ state, myPlayerId, events, onAction, onLeave }: GameV
         return;
       }
 
+      if (subAction === 'march' && selectedTile !== null) {
+        if (tile.ownerId === myPlayerId && (tile.q !== selectedTile.q || tile.r !== selectedTile.r)) {
+          setMarchDestination({ q, r });
+          return;
+        }
+        return;
+      }
+
       setSelectedTile({ q, r });
       setSubAction('inspect');
       setSelectedStackCounts(new Map());
@@ -240,6 +274,7 @@ export function GameView({ state, myPlayerId, events, onAction, onLeave }: GameV
     setSubAction('inspect');
     setSelectedStackCounts(new Map());
     setAttackSourceOverride(null);
+    setMarchDestination(null);
   }, [onAction]);
 
   if (state === null) {
@@ -320,6 +355,7 @@ export function GameView({ state, myPlayerId, events, onAction, onLeave }: GameV
               startingTileHighlights={isMyTurn ? neutralTileKeys : new Set()}
               onTileClick={handleStartingTilePick}
             />
+            <RankingPanel state={state} myPlayerId={myPlayerId} />
           </main>
         </div>
       </>
@@ -344,6 +380,7 @@ export function GameView({ state, myPlayerId, events, onAction, onLeave }: GameV
           </header>
           <main className="relative flex-1 overflow-hidden">
             <Board state={state} myPlayerId={myPlayerId} animations={animations} />
+            <RankingPanel state={state} myPlayerId={myPlayerId} />
             <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40">
               <div className="flex flex-col items-center gap-3 rounded-lg bg-white px-6 py-4 shadow-lg">
                 <p className="text-lg font-semibold text-slate-900">
@@ -395,11 +432,15 @@ export function GameView({ state, myPlayerId, events, onAction, onLeave }: GameV
           myPlayerId={myPlayerId}
           animations={animations}
           reachableHighlights={reachableHighlights}
+          marchPathHighlights={marchPathHighlights}
           selectedSource={boardSelectedSource}
           onTileClick={handlePlayingTileClick}
           attackMode={subAction === 'attack'}
           inspectedTile={selectedTile}
+          armies={state.armies}
+          onArmyClick={(id) => setInspectedArmyId(id)}
         />
+        <RankingPanel state={state} myPlayerId={myPlayerId} />
       </main>
 
       <div className="flex items-center gap-2 border-t border-slate-200 bg-white px-2 py-2">
@@ -446,9 +487,16 @@ export function GameView({ state, myPlayerId, events, onAction, onLeave }: GameV
           onStackCountChange={handleStackCountChange}
           attackSourceOverride={attackSourceOverride}
           onAttackSourceChange={setAttackSourceOverride}
+          marchDestination={marchDestination}
+          onMarchDestinationChange={setMarchDestination}
           onAction={onAction}
         />
       )}
+      <ArmyInspectorPopover
+        army={state.armies?.find((a) => a.id === inspectedArmyId) ?? null}
+        state={state}
+        onClose={() => setInspectedArmyId(null)}
+      />
       </div>
     </>
   );

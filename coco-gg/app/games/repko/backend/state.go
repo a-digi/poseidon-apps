@@ -59,6 +59,17 @@ type Tile struct {
 	Garrison   []GarrisonStack      `json:"garrison"`
 }
 
+type Army struct {
+	ID            string          `json:"id"`
+	OwnerID       string          `json:"ownerId"`
+	CurrentQ      int             `json:"currentQ"`
+	CurrentR      int             `json:"currentR"`
+	DestQ         int             `json:"destQ"`
+	DestR         int             `json:"destR"`
+	PathRemaining []Hex           `json:"pathRemaining"`
+	Units         []GarrisonStack `json:"units"`
+}
+
 type PlayerState struct {
 	ID             string       `json:"id"`
 	Name           string       `json:"name"`
@@ -95,6 +106,7 @@ type GameState struct {
 	RoundNumber           int             `json:"roundNumber"`
 	PlayersActedThisRound map[string]bool `json:"-"`
 	PendingDiplomacy      []DiplomacyOffer
+	MovingArmies          []*Army
 	WinnerID              string
 	pendingEvents         []GameEvent
 }

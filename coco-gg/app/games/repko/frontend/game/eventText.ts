@@ -33,5 +33,9 @@ export function eventToText(event: GameEvent): string {
       return `${name} placed their capital${tile ? ` at${tile}` : ''}`;
     case 'end_turn':
       return `${name} ended their turn`;
+    case 'march_start':
+      return `${name} sent ${event.unitCount ?? 0} units${tile ? ` toward${tile}` : ''}`;
+    case 'march_arrive':
+      return `${name}'s army arrived${tile ? ` at${tile}` : ''}`;
   }
 }

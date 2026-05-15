@@ -9,6 +9,7 @@ const (
 	MsgRecruit           MessageType = "recruit"
 	MsgUpgrade           MessageType = "upgrade"
 	MsgMove              MessageType = "move"
+	MsgMarch             MessageType = "march"
 	MsgAttack            MessageType = "attack"
 	MsgBuyTile           MessageType = "buy_tile"
 	MsgOfferDiplomacy    MessageType = "offer_diplomacy"
@@ -58,6 +59,7 @@ type State struct {
 	Current          *CurrentTurn     `json:"currentTurn,omitempty"`
 	Civilizations    []Civilization   `json:"civilizations,omitempty"`
 	PendingDiplomacy []DiplomacyOffer `json:"pendingDiplomacy,omitempty"`
+	Armies           []*Army          `json:"armies"`
 	WinnerID         string           `json:"winnerId,omitempty"`
 	MaxRounds        int              `json:"maxRounds,omitempty"`
 	RoundNumber      int              `json:"roundNumber,omitempty"`
@@ -100,6 +102,15 @@ type Move struct {
 }
 
 type Attack struct {
+	Type  MessageType `json:"type"`
+	FromQ int         `json:"fromQ"`
+	FromR int         `json:"fromR"`
+	ToQ   int         `json:"toQ"`
+	ToR   int         `json:"toR"`
+	Units []StackPick `json:"units"`
+}
+
+type MarchMsg struct {
 	Type  MessageType `json:"type"`
 	FromQ int         `json:"fromQ"`
 	FromR int         `json:"fromR"`
