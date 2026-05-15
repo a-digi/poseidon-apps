@@ -29,16 +29,18 @@ const (
 
 type UnitLevel int
 
-type Unit struct {
+type GarrisonStack struct {
 	Type  UnitType  `json:"type"`
 	Level UnitLevel `json:"level"`
+	Count int       `json:"count"`
 }
 
 type Civilization struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Color string `json:"color"`
-	Flag  string `json:"flag"`
+	ID              string           `json:"id"`
+	Name            string           `json:"name"`
+	Color           string           `json:"color"`
+	Flag            string           `json:"flag"`
+	StartingLoadout map[UnitType]int `json:"startingLoadout"`
 }
 
 type DiplomacyOffer struct {
@@ -54,7 +56,7 @@ type Tile struct {
 	Production ResourceType `json:"production"`
 	Yield      int          `json:"yield"`
 	OwnerID    string       `json:"ownerId"`
-	Garrison   []Unit       `json:"garrison"`
+	Garrison   []GarrisonStack `json:"garrison"`
 }
 
 type PlayerState struct {

@@ -2,7 +2,7 @@ package repko
 
 import "sort"
 
-func resolveCombat(attackers, defenders []Unit) (attackerWins bool, neutralResult bool, survivors []Unit) {
+func resolveCombat(attackers, defenders []GarrisonStack) (attackerWins bool, neutralResult bool, survivors []GarrisonStack) {
 	attackerPower := totalPower(attackers)
 	defenderPower := totalPower(defenders)
 
@@ -15,59 +15,96 @@ func resolveCombat(attackers, defenders []Unit) (attackerWins bool, neutralResul
 	return false, false, removePower(defenders, attackerPower)
 }
 
-func totalPower(units []Unit) int {
+func totalPower(stacks []GarrisonStack) int {
 	total := 0
-	for _, u := range units {
-		total += unitPower(u)
+	for _, s := range stacks {
+		total += stackPower(s) * s.Count
 	}
 	return total
 }
 
-// removePower destroys whole units from `units` in lowest-power-first order until
-// the cumulative destroyed power meets or exceeds `power`. The last unit whose
-// destruction crosses the threshold is destroyed entirely (no fractional damage).
-// Returns the survivors in the original input order.
-func removePower(units []Unit, power int) []Unit {
-	if power <= 0 || len(units) == 0 {
-		return append([]Unit(nil), units...)
+func stackPower(s GarrisonStack) int {
+	return basePower(s.Type) * int(s.Level)
+}
+
+func basePower(t UnitType) int {
+	switch t {
+	case UnitInfantry:
+		return 1
+	case UnitCavalry:
+		return 2
+	case UnitArtillery:
+		return 3
+	}
+	return 0
+}
+
+// removePower destroys whole soldiers from `stacks` in lowest-power-first order
+// until the cumulative destroyed power meets or exceeds `target`. The last
+// soldier whose destruction crosses the threshold is destroyed entirely (no
+// fractional damage). Returns the survivors in the original input order.
+func removePower(stacks []GarrisonStack, target int) []GarrisonStack {
+	work := make([]GarrisonStack, len(stacks))
+	copy(work, stacks)
+	if target <= 0 || len(work) == 0 {
+		return filterNonEmpty(work)
 	}
 
-	type indexed struct {
-		idx int
-		u   Unit
+	indices := make([]int, len(work))
+	for i := range work {
+		indices[i] = i
 	}
-	sorted := make([]indexed, len(units))
-	for i, u := range units {
-		sorted[i] = indexed{idx: i, u: u}
-	}
-	sort.SliceStable(sorted, func(i, j int) bool {
-		pi := unitPower(sorted[i].u)
-		pj := unitPower(sorted[j].u)
-		if pi != pj {
-			return pi < pj
+	sort.SliceStable(indices, func(i, j int) bool {
+		a, b := work[indices[i]], work[indices[j]]
+		pa, pb := stackPower(a), stackPower(b)
+		if pa != pb {
+			return pa < pb
 		}
-		if sorted[i].u.Type != sorted[j].u.Type {
-			return sorted[i].u.Type < sorted[j].u.Type
+		if a.Type != b.Type {
+			return a.Type < b.Type
 		}
-		return sorted[i].u.Level < sorted[j].u.Level
+		return a.Level < b.Level
 	})
 
-	destroyed := make(map[int]struct{}, len(sorted))
-	accumulated := 0
-	for _, s := range sorted {
-		if accumulated >= power {
+	for _, idx := range indices {
+		if target <= 0 {
 			break
 		}
-		destroyed[s.idx] = struct{}{}
-		accumulated += unitPower(s.u)
-	}
-
-	survivors := make([]Unit, 0, len(units))
-	for i, u := range units {
-		if _, gone := destroyed[i]; gone {
+		s := &work[idx]
+		power := stackPower(*s)
+		if power <= 0 || s.Count == 0 {
 			continue
 		}
-		survivors = append(survivors, u)
+		removable := target / power
+		if removable > s.Count {
+			removable = s.Count
+		}
+		if removable == 0 {
+			continue
+		}
+		s.Count -= removable
+		target -= removable * power
 	}
-	return survivors
+
+	if target > 0 {
+		for _, idx := range indices {
+			if work[idx].Count > 0 {
+				work[idx].Count--
+				target = 0
+				break
+			}
+		}
+	}
+
+	return filterNonEmpty(work)
+}
+
+func filterNonEmpty(stacks []GarrisonStack) []GarrisonStack {
+	out := make([]GarrisonStack, 0, len(stacks))
+	for _, s := range stacks {
+		if s.Count > 0 {
+			out = append(out, s)
+		}
+	}
+	return out
 }

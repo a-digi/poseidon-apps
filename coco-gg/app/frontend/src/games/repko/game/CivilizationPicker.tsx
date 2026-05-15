@@ -26,6 +26,7 @@ function CivTile({ civ, status, onPick }: CivTileProps) {
           ? 'border-slate-200 bg-slate-100 text-slate-400 opacity-50'
           : 'border-slate-200 bg-white text-slate-900 hover:border-slate-400 hover:bg-slate-50';
   const cursorCls = disabled ? 'cursor-not-allowed' : 'cursor-pointer';
+  const loadout = civ.startingLoadout;
   return (
     <button
       type="button"
@@ -46,6 +47,11 @@ function CivTile({ civ, status, onPick }: CivTileProps) {
           </span>
         )}
       </span>
+      {loadout !== undefined && (
+        <span className="text-[10px] text-slate-500">
+          ⚔ {loadout.infantry ?? 0}  🐎 {loadout.cavalry ?? 0}  💥 {loadout.artillery ?? 0}
+        </span>
+      )}
     </button>
   );
 }

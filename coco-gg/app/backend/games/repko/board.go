@@ -79,7 +79,7 @@ func NewBoard(rng *rand.Rand) *Board {
 			Production: prod,
 			Yield:      yield,
 			OwnerID:    "",
-			Garrison:   make([]Unit, 0),
+			Garrison:   make([]GarrisonStack, 0),
 		})
 	}
 

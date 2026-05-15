@@ -14,7 +14,9 @@ func computeIncome(tiles []*Tile) ResourceBank {
 func sumUnits(tiles []*Tile) int {
 	total := 0
 	for _, t := range tiles {
-		total += len(t.Garrison)
+		for _, s := range t.Garrison {
+			total += s.Count
+		}
 	}
 	return total
 }

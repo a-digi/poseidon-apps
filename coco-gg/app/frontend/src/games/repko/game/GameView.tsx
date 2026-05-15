@@ -1,7 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { ClientAction, StateMsg, Tile } from '../types';
+import type { ClientAction, StackPick, StateMsg, Tile } from '../types';
 import { Board } from './Board';
-import { ActionPanel, type ActionMode } from './ActionPanel';
+import {
+  ActionPanel,
+  reachableSources,
+  sortSourcesByPreference,
+  type SubAction,
+} from './ActionPanel';
 import { PlayerStatus } from './PlayerStatus';
 import { ResourcePanel } from './ResourcePanel';
 import { CivilizationPicker } from './CivilizationPicker';
@@ -24,10 +29,12 @@ function findTile(state: StateMsg, q: number, r: number): Tile | undefined {
 }
 
 export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps) {
-  const [mode, setMode] = useState<ActionMode>('none');
   const [selectedTile, setSelectedTile] = useState<{ q: number; r: number } | null>(null);
-  const [selectedSource, setSelectedSource] = useState<{ q: number; r: number } | null>(null);
-  const [selectedUnits, setSelectedUnits] = useState<Set<number>>(new Set());
+  const [subAction, setSubAction] = useState<SubAction>('inspect');
+  const [selectedStackCounts, setSelectedStackCounts] = useState<Map<number, number>>(new Map());
+  const [attackSourceOverride, setAttackSourceOverride] = useState<
+    { q: number; r: number } | null
+  >(null);
 
   const isMyTurn =
     state !== null &&
@@ -42,25 +49,27 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
     myPlayerId,
   });
 
-  const resetActionState = useCallback(() => {
-    setMode('none');
-    setSelectedSource(null);
-    setSelectedUnits(new Set());
+  const handleSubActionChange = useCallback((next: SubAction) => {
+    setSubAction(next);
+    setSelectedStackCounts(new Map());
+    if (next !== 'attack') setAttackSourceOverride(null);
   }, []);
 
-  const handleModeChange = useCallback((next: ActionMode) => {
-    setMode(next);
-    setSelectedSource(null);
-    setSelectedUnits(new Set());
-  }, []);
-
-  const toggleUnit = useCallback((idx: number) => {
-    setSelectedUnits((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
+  const handleStackCountChange = useCallback((stackIndex: number, count: number) => {
+    setSelectedStackCounts((prev) => {
+      const next = new Map(prev);
+      if (count <= 0) next.delete(stackIndex);
+      else next.set(stackIndex, count);
       return next;
     });
+  }, []);
+
+  const buildStackPicks = useCallback((counts: Map<number, number>): StackPick[] => {
+    const picks: StackPick[] = [];
+    for (const [stackIndex, count] of counts) {
+      if (count > 0) picks.push({ stackIndex, count });
+    }
+    return picks;
   }, []);
 
   const neutralTileKeys = useMemo(() => {
@@ -72,44 +81,49 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
     return s;
   }, [state]);
 
-  const reachableKeys = useMemo(() => {
-    if (state === null || myPlayerId === null) return new Set<string>();
-    if (mode !== 'move' && mode !== 'attack' && mode !== 'offer_diplomacy' && mode !== 'buy') {
+  const selectedTileObj = useMemo<Tile | null>(() => {
+    if (state === null || selectedTile === null) return null;
+    return findTile(state, selectedTile.q, selectedTile.r) ?? null;
+  }, [state, selectedTile]);
+
+  const moveDestinationKeys = useMemo(() => {
+    if (
+      state === null ||
+      myPlayerId === null ||
+      selectedTile === null ||
+      subAction !== 'move'
+    ) {
       return new Set<string>();
     }
-    const tiles = state.board?.tiles ?? [];
-    const tileByKey = new Map<string, Tile>();
-    for (const t of tiles) tileByKey.set(tileKey(t.q, t.r), t);
-
-    if (mode === 'buy') {
-      const owned = tiles.filter((t) => t.ownerId === myPlayerId);
-      const out = new Set<string>();
-      for (const src of owned) {
-        const reach = reachableForAction(state, myPlayerId, { q: src.q, r: src.r });
-        for (const r of reach) {
-          const target = tileByKey.get(tileKey(r.q, r.r));
-          if (target !== undefined && target.ownerId === '') out.add(tileKey(r.q, r.r));
-        }
-      }
-      return out;
-    }
-
-    if (selectedSource === null) return new Set<string>();
-    const reach = reachableForAction(state, myPlayerId, selectedSource);
+    const reach = reachableForAction(state, myPlayerId, selectedTile);
     const out = new Set<string>();
     for (const r of reach) {
-      const target = tileByKey.get(tileKey(r.q, r.r));
-      if (target === undefined) continue;
-      if (mode === 'move') {
-        if (target.ownerId === myPlayerId) out.add(tileKey(r.q, r.r));
-      } else if (mode === 'attack') {
-        if (target.ownerId !== myPlayerId) out.add(tileKey(r.q, r.r));
-      } else if (mode === 'offer_diplomacy') {
-        if (target.ownerId !== myPlayerId && target.ownerId !== '') out.add(tileKey(r.q, r.r));
+      const target = findTile(state, r.q, r.r);
+      if (target !== undefined && target.ownerId === myPlayerId) {
+        out.add(tileKey(r.q, r.r));
       }
     }
     return out;
-  }, [state, myPlayerId, mode, selectedSource]);
+  }, [state, myPlayerId, selectedTile, subAction]);
+
+  const reachableHighlights = subAction === 'move' ? moveDestinationKeys : new Set<string>();
+
+  const attackSource = useMemo<{ q: number; r: number } | null>(() => {
+    if (state === null || myPlayerId === null || selectedTileObj === null) return null;
+    if (subAction !== 'attack') return null;
+    if (attackSourceOverride !== null) return attackSourceOverride;
+    const sources = sortSourcesByPreference(
+      reachableSources(state, myPlayerId, selectedTileObj),
+    );
+    if (sources.length === 0) return null;
+    return { q: sources[0].q, r: sources[0].r };
+  }, [state, myPlayerId, selectedTileObj, subAction, attackSourceOverride]);
+
+  const boardSelectedSource = useMemo<{ q: number; r: number } | null>(() => {
+    if (subAction === 'move') return selectedTile;
+    if (subAction === 'attack') return attackSource;
+    return null;
+  }, [subAction, selectedTile, attackSource]);
 
   const handleStartingTilePick = useCallback(
     (q: number, r: number) => {
@@ -123,96 +137,57 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
 
   const handlePlayingTileClick = useCallback(
     (q: number, r: number) => {
+      console.info('[repko/GameView] tile click', { q, r, subAction });
       if (state === null || !isMyTurn || myPlayerId === null) return;
       const tile = findTile(state, q, r);
       if (tile === undefined) return;
 
-      if (mode === 'none' || mode === 'recruit' || mode === 'upgrade') {
-        setSelectedTile({ q, r });
-        return;
-      }
-
-      if (mode === 'buy') {
-        if (reachableKeys.has(tileKey(q, r)) && tile.ownerId === '') {
-          onAction({ type: 'buy_tile', q, r });
-          resetActionState();
-        }
-        return;
-      }
-
-      if (mode === 'move' || mode === 'attack' || mode === 'offer_diplomacy') {
-        if (selectedSource === null) {
-          if (tile.ownerId !== myPlayerId) return;
-          if ((mode === 'move' || mode === 'attack') && tile.garrison.length === 0) return;
-          setSelectedSource({ q, r });
-          setSelectedUnits(new Set());
-          return;
-        }
-
-        if (tile.ownerId === myPlayerId && (q !== selectedSource.q || r !== selectedSource.r)) {
-          if (mode === 'move') {
-            if (reachableKeys.has(tileKey(q, r))) {
-              onAction({
-                type: 'move',
-                fromQ: selectedSource.q,
-                fromR: selectedSource.r,
-                toQ: q,
-                toR: r,
-                unitIndices: [...selectedUnits],
-              });
-              resetActionState();
-              return;
-            }
-          }
-          if (mode === 'attack' || mode === 'offer_diplomacy') {
-            if (tile.garrison.length === 0 && mode === 'attack') return;
-            setSelectedSource({ q, r });
-            setSelectedUnits(new Set());
-            return;
-          }
-          setSelectedSource({ q, r });
-          setSelectedUnits(new Set());
-          return;
-        }
-
-        if (!reachableKeys.has(tileKey(q, r))) return;
-
-        if (mode === 'move') {
-          if (tile.ownerId !== myPlayerId) return;
+      if (subAction === 'move' && selectedTile !== null) {
+        if (moveDestinationKeys.has(tileKey(q, r))) {
           onAction({
             type: 'move',
-            fromQ: selectedSource.q,
-            fromR: selectedSource.r,
+            fromQ: selectedTile.q,
+            fromR: selectedTile.r,
             toQ: q,
             toR: r,
-            unitIndices: [...selectedUnits],
+            units: buildStackPicks(selectedStackCounts),
           });
-          resetActionState();
+          setSubAction('inspect');
+          setSelectedStackCounts(new Map());
           return;
         }
-        if (mode === 'attack') {
-          if (tile.ownerId === myPlayerId) return;
-          onAction({
-            type: 'attack',
-            fromQ: selectedSource.q,
-            fromR: selectedSource.r,
-            toQ: q,
-            toR: r,
-            unitIndices: [...selectedUnits],
-          });
-          resetActionState();
-          return;
-        }
-        if (mode === 'offer_diplomacy') {
-          if (tile.ownerId === myPlayerId || tile.ownerId === '') return;
-          onAction({ type: 'offer_diplomacy', q, r });
-          resetActionState();
-          return;
-        }
+        setSelectedTile({ q, r });
+        setSubAction('inspect');
+        setSelectedStackCounts(new Map());
+        setAttackSourceOverride(null);
+        return;
       }
+
+      setSelectedTile({ q, r });
+      setSubAction('inspect');
+      setSelectedStackCounts(new Map());
+      setAttackSourceOverride(null);
     },
-    [state, isMyTurn, myPlayerId, mode, selectedSource, selectedUnits, reachableKeys, onAction, resetActionState],
+    [
+      state,
+      isMyTurn,
+      myPlayerId,
+      subAction,
+      selectedTile,
+      moveDestinationKeys,
+      selectedStackCounts,
+      onAction,
+      buildStackPicks,
+    ],
   );
+
+  const handleEndTurn = useCallback(() => {
+    onAction({ type: 'end_turn' });
+    setSelectedTile(null);
+    setSubAction('inspect');
+    setSelectedStackCounts(new Map());
+    setAttackSourceOverride(null);
+  }, [onAction]);
 
   if (state === null) {
     return (
@@ -332,6 +307,14 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
           ← Leave
         </button>
         <PlayerStatus state={state} myPlayerId={myPlayerId} />
+        <button
+          type="button"
+          onClick={handleEndTurn}
+          disabled={!isMyTurn}
+          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+        >
+          End Turn
+        </button>
       </header>
 
       <DiplomacyBanner state={state} myPlayerId={myPlayerId} onAction={onAction} />
@@ -340,9 +323,10 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
         <Board
           state={state}
           myPlayerId={myPlayerId}
-          reachableHighlights={reachableKeys}
-          selectedSource={selectedSource}
+          reachableHighlights={reachableHighlights}
+          selectedSource={boardSelectedSource}
           onTileClick={handlePlayingTileClick}
+          attackMode={subAction === 'attack'}
         />
       </main>
 
@@ -354,12 +338,13 @@ export function GameView({ state, myPlayerId, onAction, onLeave }: GameViewProps
         state={state}
         myPlayerId={myPlayerId}
         isMyTurn={isMyTurn}
-        mode={mode}
-        onModeChange={handleModeChange}
-        selectedTile={selectedTile}
-        selectedSourceForMove={selectedSource}
-        selectedUnitIndices={selectedUnits}
-        onUnitIndexToggle={toggleUnit}
+        selectedTile={selectedTileObj}
+        subAction={subAction}
+        onSubActionChange={handleSubActionChange}
+        selectedStackCounts={selectedStackCounts}
+        onStackCountChange={handleStackCountChange}
+        attackSourceOverride={attackSourceOverride}
+        onAttackSourceChange={setAttackSourceOverride}
         onAction={onAction}
       />
     </div>

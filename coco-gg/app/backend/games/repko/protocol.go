@@ -77,28 +77,28 @@ type Recruit struct {
 }
 
 type Upgrade struct {
-	Type      MessageType `json:"type"`
-	Q         int         `json:"q"`
-	R         int         `json:"r"`
-	UnitIndex int         `json:"unitIndex"`
+	Type       MessageType `json:"type"`
+	Q          int         `json:"q"`
+	R          int         `json:"r"`
+	StackIndex int         `json:"stackIndex"`
 }
 
 type Move struct {
-	Type        MessageType `json:"type"`
-	FromQ       int         `json:"fromQ"`
-	FromR       int         `json:"fromR"`
-	ToQ         int         `json:"toQ"`
-	ToR         int         `json:"toR"`
-	UnitIndices []int       `json:"unitIndices"`
+	Type  MessageType `json:"type"`
+	FromQ int         `json:"fromQ"`
+	FromR int         `json:"fromR"`
+	ToQ   int         `json:"toQ"`
+	ToR   int         `json:"toR"`
+	Units []StackPick `json:"units"`
 }
 
 type Attack struct {
-	Type        MessageType `json:"type"`
-	FromQ       int         `json:"fromQ"`
-	FromR       int         `json:"fromR"`
-	ToQ         int         `json:"toQ"`
-	ToR         int         `json:"toR"`
-	UnitIndices []int       `json:"unitIndices"`
+	Type  MessageType `json:"type"`
+	FromQ int         `json:"fromQ"`
+	FromR int         `json:"fromR"`
+	ToQ   int         `json:"toQ"`
+	ToR   int         `json:"toR"`
+	Units []StackPick `json:"units"`
 }
 
 type BuyTile struct {

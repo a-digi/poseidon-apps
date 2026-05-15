@@ -45,18 +45,22 @@ type ActionRecruit struct {
 	Count int
 }
 type ActionUpgrade struct {
-	Q, R      int
-	UnitIndex int
+	Q, R       int
+	StackIndex int
+}
+type StackPick struct {
+	StackIndex int `json:"stackIndex"`
+	Count      int `json:"count"`
 }
 type ActionMove struct {
 	FromQ, FromR int
 	ToQ, ToR     int
-	UnitIndices  []int
+	Units        []StackPick
 }
 type ActionAttack struct {
 	FromQ, FromR int
 	ToQ, ToR     int
-	UnitIndices  []int
+	Units        []StackPick
 }
 type ActionBuyTile struct{ Q, R int }
 type ActionOfferDiplomacy struct{ Q, R int }
@@ -175,14 +179,34 @@ func validateAndApplyPickStartingTile(state *GameState, playerID string, a Actio
 		return ErrNotYourTurn
 	}
 	tile.OwnerID = playerID
-	tile.Garrison = append(tile.Garrison, Unit{Type: UnitInfantry, Level: 1}, Unit{Type: UnitInfantry, Level: 1})
+	tile.Garrison = buildStartingGarrison(state, player.CivilizationID)
 	player.Resources.add(ResourceBank{
-		ResourceGold: 10,
-		ResourceIron: 2,
-		ResourceFood: 5,
+		ResourceGold: 30,
+		ResourceIron: 5,
+		ResourceFood: 60,
 	})
 	advanceTilePick(state)
 	return nil
+}
+
+func buildStartingGarrison(state *GameState, civID string) []GarrisonStack {
+	var loadout map[UnitType]int
+	for _, c := range state.Civilizations {
+		if c.ID == civID {
+			loadout = c.StartingLoadout
+			break
+		}
+	}
+	order := []UnitType{UnitInfantry, UnitCavalry, UnitArtillery}
+	garrison := make([]GarrisonStack, 0, len(order))
+	for _, ut := range order {
+		count := loadout[ut]
+		if count <= 0 {
+			continue
+		}
+		garrison = append(garrison, GarrisonStack{Type: ut, Level: 1, Count: count})
+	}
+	return garrison
 }
 
 func validateAndApplyRecruit(state *GameState, playerID string, a ActionRecruit) error {
@@ -212,10 +236,19 @@ func validateAndApplyRecruit(state *GameState, playerID string, a ActionRecruit)
 		return ErrInsufficientResources
 	}
 	player.Resources.deduct(total)
-	for i := 0; i < a.Count; i++ {
-		tile.Garrison = append(tile.Garrison, Unit{Type: a.Unit, Level: 1})
-	}
+	addToStack(&tile.Garrison, a.Unit, 1, a.Count)
 	return nil
+}
+
+func addToStack(garrison *[]GarrisonStack, ut UnitType, level UnitLevel, count int) {
+	for i := range *garrison {
+		s := &(*garrison)[i]
+		if s.Type == ut && s.Level == level {
+			s.Count += count
+			return
+		}
+	}
+	*garrison = append(*garrison, GarrisonStack{Type: ut, Level: level, Count: count})
 }
 
 func validateAndApplyUpgrade(state *GameState, playerID string, a ActionUpgrade) error {
@@ -229,14 +262,17 @@ func validateAndApplyUpgrade(state *GameState, playerID string, a ActionUpgrade)
 	if tile.OwnerID != playerID {
 		return ErrTileNotOwned
 	}
-	if a.UnitIndex < 0 || a.UnitIndex >= len(tile.Garrison) {
+	if a.StackIndex < 0 || a.StackIndex >= len(tile.Garrison) {
 		return ErrInvalidUnit
 	}
-	unit := tile.Garrison[a.UnitIndex]
-	if unit.Level >= 3 {
+	s := &tile.Garrison[a.StackIndex]
+	if s.Count == 0 {
+		return ErrInvalidUnit
+	}
+	if s.Level >= 3 {
 		return ErrMaxLevel
 	}
-	cost := upgradeCost(unit)
+	cost := upgradeCost(GarrisonStack{Type: s.Type, Level: s.Level, Count: 1})
 	player := state.playerByID(playerID)
 	if player == nil {
 		return ErrNotYourTurn
@@ -245,7 +281,13 @@ func validateAndApplyUpgrade(state *GameState, playerID string, a ActionUpgrade)
 		return ErrInsufficientResources
 	}
 	player.Resources.deduct(cost)
-	tile.Garrison[a.UnitIndex].Level = unit.Level + 1
+	srcType := s.Type
+	srcLevel := s.Level
+	s.Count--
+	if s.Count == 0 {
+		tile.Garrison = append(tile.Garrison[:a.StackIndex], tile.Garrison[a.StackIndex+1:]...)
+	}
+	addToStack(&tile.Garrison, srcType, srcLevel+1, 1)
 	return nil
 }
 
@@ -278,13 +320,16 @@ func validateAndApplyMove(state *GameState, playerID string, a ActionMove) error
 	if !hasFriendlyPath(state, playerID, from, to) {
 		return ErrNoFriendlyPath
 	}
-	indices, err := validateUnitSelection(a.UnitIndices, len(fromTile.Garrison))
+	picks, err := validateStackPicks(a.Units, fromTile.Garrison)
 	if err != nil {
 		return err
 	}
-	moving := pickUnits(fromTile.Garrison, indices)
-	fromTile.Garrison = removeIndices(fromTile.Garrison, indices)
-	toTile.Garrison = append(toTile.Garrison, moving...)
+	for _, p := range picks {
+		src := &fromTile.Garrison[p.StackIndex]
+		addToStack(&toTile.Garrison, src.Type, src.Level, p.Count)
+		src.Count -= p.Count
+	}
+	fromTile.Garrison = filterNonEmpty(fromTile.Garrison)
 	state.UsedActionsThisTurn[actionKeyMove]++
 	return nil
 }
@@ -321,36 +366,53 @@ func validateAndApplyAttack(state *GameState, playerID string, a ActionAttack) e
 	if len(fromTile.Garrison) == 0 {
 		return ErrAttackFromEmptyTile
 	}
-	indices, err := validateUnitSelection(a.UnitIndices, len(fromTile.Garrison))
+	picks, err := validateStackPicks(a.Units, fromTile.Garrison)
 	if err != nil {
 		return err
 	}
+	player := state.playerByID(playerID)
+	if player == nil {
+		return ErrNotYourTurn
+	}
+	cost := attackCost(picks, fromTile.Garrison)
+	if !player.Resources.canAfford(cost) {
+		return ErrInsufficientResources
+	}
+	player.Resources.deduct(cost)
 	defenderID := toTile.OwnerID
-	attackingUnits := pickUnits(fromTile.Garrison, indices)
-	defendingUnits := append([]Unit(nil), toTile.Garrison...)
+	attackerForces := make([]GarrisonStack, 0, len(picks))
+	for _, p := range picks {
+		src := fromTile.Garrison[p.StackIndex]
+		attackerForces = append(attackerForces, GarrisonStack{Type: src.Type, Level: src.Level, Count: p.Count})
+	}
+	defendingUnits := append([]GarrisonStack(nil), toTile.Garrison...)
 
-	attackerWins, neutralResult, survivors := resolveCombat(attackingUnits, defendingUnits)
+	attackerWins, neutralResult, survivors := resolveCombat(attackerForces, defendingUnits)
 
-	fromTile.Garrison = removeIndices(fromTile.Garrison, indices)
+	for _, p := range picks {
+		fromTile.Garrison[p.StackIndex].Count -= p.Count
+	}
+	fromTile.Garrison = filterNonEmpty(fromTile.Garrison)
 
 	var outcome string
 	switch {
 	case neutralResult:
 		toTile.OwnerID = ""
-		toTile.Garrison = toTile.Garrison[:0]
+		toTile.Garrison = []GarrisonStack{}
 		outcome = "tie_neutral"
 	case attackerWins:
 		toTile.OwnerID = playerID
-		toTile.Garrison = append([]Unit(nil), survivors...)
+		toTile.Garrison = append([]GarrisonStack(nil), survivors...)
 		outcome = "attacker_won"
 	default:
-		toTile.Garrison = append([]Unit(nil), survivors...)
+		toTile.Garrison = append([]GarrisonStack(nil), survivors...)
 		outcome = "defender_won"
 	}
 	state.UsedActionsThisTurn[actionKeyAttack]++
 
 	log.Printf("game: repko combat (attacker=%s defender=%s from=(%d,%d) to=(%d,%d) result=%s survivors_power=%d)",
 		playerID, defenderID, from.Q, from.R, to.Q, to.R, outcome, totalPower(survivors))
+	log.Printf("game: repko attack cost (player=%s gold=%d)", playerID, cost[ResourceGold])
 
 	checkAndApplyWin(state)
 	return nil
@@ -436,12 +498,22 @@ func validateAndApplyOfferDiplomacy(state *GameState, playerID string, a ActionO
 	if !withPath {
 		return ErrNoFriendlyPath
 	}
+	player := state.playerByID(playerID)
+	if player == nil {
+		return ErrNotYourTurn
+	}
+	cost := diplomacyCost(tile.Garrison)
+	if !player.Resources.canAfford(cost) {
+		return ErrInsufficientResources
+	}
+	player.Resources.deduct(cost)
 	state.PendingDiplomacy = append(state.PendingDiplomacy, DiplomacyOffer{
 		Q:          a.Q,
 		R:          a.R,
 		AttackerID: playerID,
 		DefenderID: tile.OwnerID,
 	})
+	log.Printf("game: repko diplomacy offer cost (player=%s gold=%d)", playerID, cost[ResourceGold])
 	return nil
 }
 
@@ -470,9 +542,14 @@ func validateAndApplyAcceptDiplomacy(state *GameState, playerID string, a Action
 	dest, ok := chooseRetreatDestination(state, playerID, from)
 	if ok {
 		toTile := state.tile(dest.Q, dest.R)
-		toTile.Garrison = append(toTile.Garrison, fromTile.Garrison...)
+		for _, s := range fromTile.Garrison {
+			if s.Count <= 0 {
+				continue
+			}
+			addToStack(&toTile.Garrison, s.Type, s.Level, s.Count)
+		}
 	}
-	fromTile.Garrison = fromTile.Garrison[:0]
+	fromTile.Garrison = []GarrisonStack{}
 	fromTile.OwnerID = attackerID
 	state.removeDiplomacy(a.Q, a.R)
 
@@ -521,6 +598,19 @@ func validateAndApplyEndTurn(state *GameState, playerID string) error {
 	return nil
 }
 
+func attackCost(picks []StackPick, garrison []GarrisonStack) ResourceBank {
+	power := 0
+	for _, p := range picks {
+		s := garrison[p.StackIndex]
+		power += p.Count * basePower(s.Type) * int(s.Level)
+	}
+	return ResourceBank{ResourceGold: power}
+}
+
+func diplomacyCost(defender []GarrisonStack) ResourceBank {
+	return ResourceBank{ResourceGold: totalPower(defender) * 2}
+}
+
 func unitCost(t UnitType) ResourceBank {
 	switch t {
 	case UnitInfantry:
@@ -533,26 +623,13 @@ func unitCost(t UnitType) ResourceBank {
 	return emptyResourceBank()
 }
 
-func upgradeCost(u Unit) ResourceBank {
-	base := unitCost(u.Type)
+func upgradeCost(s GarrisonStack) ResourceBank {
+	base := unitCost(s.Type)
 	multiplier := 1
-	if u.Level == 2 {
+	if s.Level == 2 {
 		multiplier = 2
 	}
 	return scaleCost(base, multiplier)
-}
-
-func unitPower(u Unit) int {
-	base := 0
-	switch u.Type {
-	case UnitInfantry:
-		base = 1
-	case UnitCavalry:
-		base = 2
-	case UnitArtillery:
-		base = 3
-	}
-	return base * int(u.Level)
 }
 
 func scaleCost(cost ResourceBank, n int) ResourceBank {
@@ -576,46 +653,26 @@ func civilizationExists(state *GameState, civID string) bool {
 	return false
 }
 
-func validateUnitSelection(indices []int, garrisonLen int) ([]int, error) {
-	if len(indices) == 0 {
+func validateStackPicks(picks []StackPick, garrison []GarrisonStack) ([]StackPick, error) {
+	if len(picks) == 0 {
 		return nil, ErrEmptyUnitSelection
 	}
-	seen := make(map[int]struct{}, len(indices))
-	out := make([]int, 0, len(indices))
-	for _, idx := range indices {
-		if idx < 0 || idx >= garrisonLen {
+	requested := make(map[int]int, len(picks))
+	out := make([]StackPick, 0, len(picks))
+	for _, p := range picks {
+		if p.StackIndex < 0 || p.StackIndex >= len(garrison) {
 			return nil, ErrInvalidUnit
 		}
-		if _, dup := seen[idx]; dup {
+		if p.Count <= 0 {
 			return nil, ErrInvalidUnit
 		}
-		seen[idx] = struct{}{}
-		out = append(out, idx)
+		requested[p.StackIndex] += p.Count
+		if requested[p.StackIndex] > garrison[p.StackIndex].Count {
+			return nil, ErrInvalidUnit
+		}
+		out = append(out, p)
 	}
 	return out, nil
-}
-
-func pickUnits(garrison []Unit, indices []int) []Unit {
-	out := make([]Unit, 0, len(indices))
-	for _, idx := range indices {
-		out = append(out, garrison[idx])
-	}
-	return out
-}
-
-func removeIndices(garrison []Unit, indices []int) []Unit {
-	skip := make(map[int]struct{}, len(indices))
-	for _, idx := range indices {
-		skip[idx] = struct{}{}
-	}
-	out := make([]Unit, 0, len(garrison)-len(indices))
-	for i, u := range garrison {
-		if _, dropped := skip[i]; dropped {
-			continue
-		}
-		out = append(out, u)
-	}
-	return out
 }
 
 func intermediatesAtDistance2(from, to Hex) []Hex {
@@ -694,7 +751,11 @@ func chooseRetreatDestination(state *GameState, defenderID string, from Hex) (He
 		if !hasRetreatPath(state, defenderID, from, h) {
 			continue
 		}
-		candidates = append(candidates, candidate{hex: h, garrison: len(t.Garrison)})
+		soldiers := 0
+		for _, s := range t.Garrison {
+			soldiers += s.Count
+		}
+		candidates = append(candidates, candidate{hex: h, garrison: soldiers})
 	}
 	if len(candidates) == 0 {
 		return Hex{}, false
@@ -863,7 +924,9 @@ func recomputeCounters(state *GameState) {
 			continue
 		}
 		tileCounts[t.OwnerID]++
-		unitCounts[t.OwnerID] += len(t.Garrison)
+		for _, s := range t.Garrison {
+			unitCounts[t.OwnerID] += s.Count
+		}
 	}
 	for _, p := range state.Players {
 		p.TileCount = tileCounts[p.ID]
@@ -889,6 +952,9 @@ func applyTurnIncome(state *GameState, playerID string) {
 		}
 		player.Resources[ResourceFood]++
 	}
+	for _, t := range owned {
+		t.Garrison = filterNonEmpty(t.Garrison)
+	}
 	if player.Resources[ResourceFood] < 0 {
 		player.Resources[ResourceFood] = 0
 	}
@@ -896,16 +962,19 @@ func applyTurnIncome(state *GameState, playerID string) {
 
 func destroyLowestPowerUnit(tiles []*Tile) bool {
 	type candidate struct {
-		tileIdx int
-		unitIdx int
-		power   int
-		q, r    int
+		tileIdx  int
+		stackIdx int
+		power    int
+		q, r     int
 	}
 	var best *candidate
 	for ti, t := range tiles {
-		for ui, u := range t.Garrison {
-			p := unitPower(u)
-			c := candidate{tileIdx: ti, unitIdx: ui, power: p, q: t.Q, r: t.R}
+		for si, s := range t.Garrison {
+			if s.Count <= 0 {
+				continue
+			}
+			p := stackPower(s)
+			c := candidate{tileIdx: ti, stackIdx: si, power: p, q: t.Q, r: t.R}
 			if best == nil {
 				cc := c
 				best = &cc
@@ -914,7 +983,7 @@ func destroyLowestPowerUnit(tiles []*Tile) bool {
 			if c.power < best.power ||
 				(c.power == best.power && c.q < best.q) ||
 				(c.power == best.power && c.q == best.q && c.r < best.r) ||
-				(c.power == best.power && c.q == best.q && c.r == best.r && c.unitIdx < best.unitIdx) {
+				(c.power == best.power && c.q == best.q && c.r == best.r && c.stackIdx < best.stackIdx) {
 				cc := c
 				best = &cc
 			}
@@ -924,6 +993,6 @@ func destroyLowestPowerUnit(tiles []*Tile) bool {
 		return false
 	}
 	tile := tiles[best.tileIdx]
-	tile.Garrison = append(tile.Garrison[:best.unitIdx], tile.Garrison[best.unitIdx+1:]...)
+	tile.Garrison[best.stackIdx].Count--
 	return true
 }

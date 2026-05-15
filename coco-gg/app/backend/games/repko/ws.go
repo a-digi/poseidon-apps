@@ -152,21 +152,21 @@ func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				sendError(player, "invalid message")
 				continue
 			}
-			h.dispatch(room, player, ActionUpgrade{Q: m.Q, R: m.R, UnitIndex: m.UnitIndex})
+			h.dispatch(room, player, ActionUpgrade{Q: m.Q, R: m.R, StackIndex: m.StackIndex})
 		case MsgMove:
 			var m Move
 			if json.Unmarshal(raw, &m) != nil {
 				sendError(player, "invalid message")
 				continue
 			}
-			h.dispatch(room, player, ActionMove{FromQ: m.FromQ, FromR: m.FromR, ToQ: m.ToQ, ToR: m.ToR, UnitIndices: m.UnitIndices})
+			h.dispatch(room, player, ActionMove{FromQ: m.FromQ, FromR: m.FromR, ToQ: m.ToQ, ToR: m.ToR, Units: m.Units})
 		case MsgAttack:
 			var m Attack
 			if json.Unmarshal(raw, &m) != nil {
 				sendError(player, "invalid message")
 				continue
 			}
-			h.dispatch(room, player, ActionAttack{FromQ: m.FromQ, FromR: m.FromR, ToQ: m.ToQ, ToR: m.ToR, UnitIndices: m.UnitIndices})
+			h.dispatch(room, player, ActionAttack{FromQ: m.FromQ, FromR: m.FromR, ToQ: m.ToQ, ToR: m.ToR, Units: m.Units})
 		case MsgBuyTile:
 			var m BuyTile
 			if json.Unmarshal(raw, &m) != nil {

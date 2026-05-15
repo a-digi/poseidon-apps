@@ -6,9 +6,15 @@ export type UnitType = 'infantry' | 'cavalry' | 'artillery';
 
 export type UnitLevel = 1 | 2 | 3;
 
-export interface Unit {
+export interface GarrisonStack {
   type: UnitType;
   level: UnitLevel;
+  count: number;
+}
+
+export interface StackPick {
+  stackIndex: number;
+  count: number;
 }
 
 export interface Tile {
@@ -17,7 +23,7 @@ export interface Tile {
   production: ResourceType;
   yield: number;
   ownerId: string;
-  garrison: Unit[];
+  garrison: GarrisonStack[];
 }
 
 export interface Board {
@@ -29,6 +35,7 @@ export interface Civilization {
   name: string;
   color: string;
   flag: string;
+  startingLoadout?: Record<UnitType, number>;
 }
 
 export interface DiplomacyOffer {
@@ -111,7 +118,7 @@ export interface Upgrade {
   type: 'upgrade';
   q: number;
   r: number;
-  unitIndex: number;
+  stackIndex: number;
 }
 
 export interface Move {
@@ -120,7 +127,7 @@ export interface Move {
   fromR: number;
   toQ: number;
   toR: number;
-  unitIndices: number[];
+  units: StackPick[];
 }
 
 export interface Attack {
@@ -129,7 +136,7 @@ export interface Attack {
   fromR: number;
   toQ: number;
   toR: number;
-  unitIndices: number[];
+  units: StackPick[];
 }
 
 export interface BuyTile {
