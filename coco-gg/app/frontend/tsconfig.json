@@ -15,12 +15,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "rootDir": "src",
-    "baseUrl": "./",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*":      ["./src/*"],
+      "@shell/*": ["./src/shell/*"],
+      "@games/*": ["../games/*"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "../games/*/frontend/**/*"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

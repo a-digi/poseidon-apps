@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
-	"coco-gg-plugin/gamemeta"
-	"coco-gg-plugin/runtime"
+	"coco-gg-plugin/backend/gamemeta"
+	"coco-gg-plugin/backend/runtime"
 )
 
 type GameRegistrar func(ctx context.Context, r runtime.Router) gamemeta.Info

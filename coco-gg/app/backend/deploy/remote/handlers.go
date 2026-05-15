@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"coco-gg-plugin/gamemeta"
+	"coco-gg-plugin/backend/gamemeta"
 )
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {

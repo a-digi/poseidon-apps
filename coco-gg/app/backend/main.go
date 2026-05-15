@@ -7,10 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"coco-gg-plugin/deploy/local"
-	"coco-gg-plugin/deploy/remote"
-	"coco-gg-plugin/games/movement"
-	"coco-gg-plugin/games/repko"
+	"coco-gg-plugin/backend/deploy/local"
+	"coco-gg-plugin/backend/deploy/remote"
+	"coco-gg-plugin/games/repko/backend"
 )
 
 func main() {
@@ -20,9 +19,9 @@ func main() {
 	var err error
 	switch os.Getenv("MODE") {
 	case "remote":
-		err = remote.Run(ctx, []remote.GameRegistrar{movement.Register, repko.Register})
+		err = remote.Run(ctx, []remote.GameRegistrar{repko.Register})
 	default:
-		err = local.Run(ctx, []local.GameRegistrar{movement.Register, repko.Register})
+		err = local.Run(ctx, []local.GameRegistrar{repko.Register})
 	}
 	if err != nil {
 		log.Fatalf("run: %v", err)

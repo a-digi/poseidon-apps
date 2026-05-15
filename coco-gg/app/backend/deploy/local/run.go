@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"time"
 
-	"coco-gg-plugin/gamemeta"
-	"coco-gg-plugin/runtime"
+	"coco-gg-plugin/backend/gamemeta"
+	"coco-gg-plugin/backend/runtime"
 )
 
 const (
