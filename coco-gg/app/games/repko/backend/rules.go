@@ -382,7 +382,7 @@ func validateAndApplyAttack(state *GameState, playerID string, a ActionAttack) e
 		src := fromTile.Garrison[p.StackIndex]
 		attackerForces = append(attackerForces, GarrisonStack{Type: src.Type, Level: src.Level, Count: p.Count})
 	}
-	defendingUnits := append([]GarrisonStack(nil), toTile.Garrison...)
+	defendingUnits := append([]GarrisonStack{}, toTile.Garrison...)
 
 	attackerWins, neutralResult, survivors := resolveCombat(attackerForces, defendingUnits)
 
@@ -399,10 +399,10 @@ func validateAndApplyAttack(state *GameState, playerID string, a ActionAttack) e
 		outcome = "tie_neutral"
 	case attackerWins:
 		toTile.OwnerID = playerID
-		toTile.Garrison = append([]GarrisonStack(nil), survivors...)
+		toTile.Garrison = append([]GarrisonStack{}, survivors...)
 		outcome = "attacker_won"
 	default:
-		toTile.Garrison = append([]GarrisonStack(nil), survivors...)
+		toTile.Garrison = append([]GarrisonStack{}, survivors...)
 		outcome = "defender_won"
 	}
 	state.UsedActionsThisTurn[actionKeyAttack]++

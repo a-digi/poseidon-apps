@@ -337,6 +337,14 @@ func (r *Room) buildSnapshotsLocked() map[string][]byte {
 		return out
 	}
 
+	if r.state != nil && r.state.Board != nil {
+		for _, t := range r.state.Board.Tiles {
+			if t.Garrison == nil {
+				t.Garrison = []GarrisonStack{}
+			}
+		}
+	}
+
 	tileCounts := r.state.tileCountByPlayer()
 	unitCounts := make(map[string]int, len(r.state.Players))
 	for _, t := range r.state.Board.Tiles {
