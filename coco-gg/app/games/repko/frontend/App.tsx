@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { RepkoLogo } from './RepkoLogo';
 import {
   createRoom,
+  getHostVersion,
   listRooms,
   destroyRoom,
   kickPlayer,
@@ -14,6 +15,8 @@ import { ShareDialog } from './components/ShareDialog';
 import { RoomCard } from './components/RoomCard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+const MIN_HOST_API_VERSION = 1;
+
 interface AppProps {
   config?: ServerConfig;
 }
@@ -25,6 +28,30 @@ function App({ config }: AppProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [playerCountDraft, setPlayerCountDraft] = useState<number | null>(null);
   const [roundsDraft, setRoundsDraft] = useState<number>(20);
+  const [hostStatus, setHostStatus] = useState<'checking' | 'ok' | 'outdated'>('checking');
+
+  useEffect(() => {
+    let alive = true;
+    getHostVersion()
+      .then((v) => {
+        if (!alive) return;
+        if (v.apiVersion < MIN_HOST_API_VERSION) {
+          console.warn('[repko/App] host apiVersion too low', { got: v.apiVersion, want: MIN_HOST_API_VERSION });
+          setHostStatus('outdated');
+        } else {
+          console.info('[repko/App] host version ok', v);
+          setHostStatus('ok');
+        }
+      })
+      .catch((err) => {
+        if (!alive) return;
+        console.error('[repko/App] host version probe failed', err);
+        setHostStatus('outdated');
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function refreshRooms() {
     try {
@@ -78,6 +105,7 @@ function App({ config }: AppProps) {
   }
 
   useEffect(() => {
+    if (hostStatus !== 'ok') return;
     console.info('[repko/App] mount');
     let cancelled = false;
 
@@ -97,9 +125,28 @@ function App({ config }: AppProps) {
       clearInterval(id);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hostStatus]);
 
   const subline = `${stats.activeRooms} active room${stats.activeRooms === 1 ? '' : 's'} · ${stats.totalPlayers} player${stats.totalPlayers === 1 ? '' : 's'} online · ${stats.activeGames} in play`;
+
+  if (hostStatus === 'checking') {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-sm text-slate-500">
+        Checking host…
+      </div>
+    );
+  }
+
+  if (hostStatus === 'outdated') {
+    return (
+      <div className="m-4 rounded border-2 border-amber-500 bg-amber-50 p-4 text-amber-900">
+        <h2 className="text-base font-bold">Host application is out of date</h2>
+        <p className="mt-1 text-sm">
+          This plugin requires a newer host. Please update the desktop app and restart.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary label="repko/App">

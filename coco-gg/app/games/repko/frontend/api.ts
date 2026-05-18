@@ -119,3 +119,16 @@ export async function startGame(code: string): Promise<void> {
     headers: { ...authHeaders() },
   });
 }
+
+export interface HostVersion {
+  version: string;
+  commit: string;
+  buildDate: string;
+  apiVersion: number;
+}
+
+export async function getHostVersion(): Promise<HostVersion> {
+  return requestJSON<HostVersion>('getHostVersion', `${HOST}/api/system/version`, {
+    headers: { ...authHeaders() },
+  });
+}
